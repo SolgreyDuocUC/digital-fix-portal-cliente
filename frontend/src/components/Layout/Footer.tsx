@@ -24,11 +24,11 @@ const BRANCHES = [
   { region: "Región de Coquimbo", cities: ["La Serena"] },
 ];
 
-const linkClass = "text-slate-500 hover:text-blue-600 cursor-pointer transition";
+const linkClass = "text-slate-500";
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="bg-white border-t border-sky-100 mt-16">
+    <footer className="bg-white border-t border-slate-200 mt-16">
       <div className="max-w-7xl mx-auto px-4 py-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-x-8 gap-y-10">
         {/* Marca */}
         <div className="lg:col-span-3 space-y-3">
@@ -41,7 +41,7 @@ export const Footer: React.FC = () => {
 
         {/* Servicios */}
         <div className="lg:col-span-2">
-          <h4 className="text-sm font-semibold text-slate-800 mb-3">Servicios</h4>
+          <h4 className="eyebrow mb-3">Servicios</h4>
           <ul className="space-y-2 text-xs">
             {SERVICES.map((s) => (
               <li key={s} className={linkClass}>{s}</li>
@@ -51,7 +51,7 @@ export const Footer: React.FC = () => {
 
         {/* Repuestos */}
         <div className="lg:col-span-3">
-          <h4 className="text-sm font-semibold text-slate-800 mb-3">Repuestos y materiales</h4>
+          <h4 className="eyebrow mb-3">Repuestos y materiales</h4>
           <ul className="space-y-2 text-xs">
             {PARTS.map((p) => (
               <li key={p} className={linkClass}>{p}</li>
@@ -61,7 +61,7 @@ export const Footer: React.FC = () => {
 
         {/* Sucursales */}
         <div className="lg:col-span-4">
-          <h4 className="text-sm font-semibold text-slate-800 mb-3">Sucursales</h4>
+          <h4 className="eyebrow mb-3">Sucursales</h4>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
             {BRANCHES.map((b) => (
               <div key={b.region}>
@@ -78,7 +78,7 @@ export const Footer: React.FC = () => {
       </div>
 
       {/* Franja inferior */}
-      <div className="bg-sky-50/70 border-t border-sky-100">
+      <div className="bg-slate-50 border-t border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-5 text-xs text-slate-500 flex flex-col md:flex-row items-center justify-between gap-3">
           <p>© 2026 DigitalFix SpA. Todos los derechos reservados.</p>
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">

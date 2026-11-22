@@ -1,8 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useCart } from "@/contexts/CartContext";
 import { useCatalog } from "@/hooks/useCatalog";
 import { useCatalogFilters } from "@/hooks/useCatalogFilters";
-import { BRANDS } from "@/mocks/marcas";
+import { uniqueBrands } from "@/utils/catalog";
 import { PageShell, Container } from "@/components/Pages/2-Catalog/PageShell";
 import { CatalogLayout } from "@/components/Pages/2-Catalog/CatalogLayout";
 import { SectionHeader } from "@/components/Pages/2-Catalog/SectionHeader";
@@ -20,11 +20,12 @@ export const ProductsPage: React.FC<ProductsPageProps> = ({ searchQuery }) => {
   const { addToCart } = useCart();
   const { products } = useCatalog();
   const filters = useCatalogFilters({ items: products, searchQuery });
+  const brands = useMemo(() => uniqueBrands(products), [products]);
 
   return (
     <PageShell>
       <Container className="py-8 space-y-6">
-        <BrandChips brands={BRANDS} />
+        {brands.length > 0 && <BrandChips brands={brands} />}
 
         <CatalogLayout
           sidebar={

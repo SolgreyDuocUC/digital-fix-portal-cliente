@@ -1,10 +1,9 @@
 import { ElectricalProduct } from "@/types/product";
 
-/** Todo lo que está en esta categoría es un producto físico; el resto son servicios. */
+/** Sección de tienda que agrupa los repuestos (productos físicos de ms-catalog). */
 export const PRODUCT_CATEGORY = "Repuestos";
 
-export const isProduct = (item: ElectricalProduct): boolean =>
-  item.category === PRODUCT_CATEGORY;
+export const isProduct = (item: ElectricalProduct): boolean => item.kind === "REPUESTO";
 
 export const isService = (item: ElectricalProduct): boolean => !isProduct(item);
 
@@ -14,12 +13,12 @@ export const discountOf = (price: number, original?: number): number =>
 export const matchesSearch = (item: ElectricalProduct, query: string): boolean => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [item.name, item.description, item.code].some((field) =>
+  return [item.name, item.description, item.code, item.brand ?? ""].some((field) =>
     field.toLowerCase().includes(q)
   );
 };
 
-/** Criterio temporal de "destacados": mayor descuento primero. */
+/** Destacados: primero los que marca Marketing, luego los de mayor descuento. */
 export const pickFeatured = (
   items: ElectricalProduct[],
   count: number
@@ -27,6 +26,13 @@ export const pickFeatured = (
   [...items]
     .sort(
       (a, b) =>
+        Number(!!b.featured) - Number(!!a.featured) ||
         discountOf(b.price, b.originalPrice) - discountOf(a.price, a.originalPrice)
     )
     .slice(0, count);
+
+/** Marcas presentes en los repuestos, sin repetir. */
+export const uniqueBrands = (items: ElectricalProduct[]): string[] =>
+  Array.from(new Set(items.map((i) => i.brand?.trim()).filter((b): b is string => !!b))).sort((a, b) =>
+    a.localeCompare(b, "es")
+  );

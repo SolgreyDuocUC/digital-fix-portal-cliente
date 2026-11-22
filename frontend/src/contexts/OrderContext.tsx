@@ -1,38 +1,67 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ClientOrder } from "@/types/order";
-import { INITIAL_ORDERS } from "@/components/Pages/5-MyOrders/MyOrdersPage";
-import { getStoredOrders, saveStoredOrders } from "@/services/orderService";
+import { fetchMyOrders } from "@/services/orderService";
+import { errorMessage } from "@/services/api";
+import { useAuth } from "./AuthContext";
 
 interface OrderContextType {
   orders: ClientOrder[];
+  loading: boolean;
+  error: string | null;
+  /** Vuelve a consultar el estado en vivo de los pedidos. */
+  refresh: () => void;
   selectedOrderId: string | null;
   setSelectedOrderId: (id: string | null) => void;
+  /** Agrega un pedido recién creado sin esperar a la siguiente consulta. */
   addOrder: (order: ClientOrder) => void;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
+/** Pedidos del cliente con sesión iniciada (backend → ms-workorders). */
 export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [orders, setOrders] = useState<ClientOrder[]>(() => {
-    const stored = getStoredOrders();
-    return stored.length > 0 ? [...stored, ...INITIAL_ORDERS] : INITIAL_ORDERS;
-  });
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<ClientOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>("DF-1042");
-
-  const addOrder = (order: ClientOrder) => {
-    setOrders((prev) => [order, ...prev]);
-    setSelectedOrderId(order.id);
-  };
+  const esCliente = user?.role === "CLIENTE";
+  const clientName = user?.fullName ?? "";
+  const clientRut = user?.rut ?? "";
 
   useEffect(() => {
-    // Sincronizar storage
-    const custom = orders.filter((o) => !INITIAL_ORDERS.some((init) => init.id === o.id));
-    saveStoredOrders(custom);
-  }, [orders]);
+    if (!esCliente) {
+      setOrders([]);
+      setError(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetchMyOrders({ name: clientName, rut: clientRut }, ctrl.signal)
+      .then(setOrders)
+      .catch((err) => {
+        if ((err as Error)?.name !== "AbortError") setError(errorMessage(err));
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [esCliente, clientName, clientRut, version]);
+
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  const addOrder = useCallback((order: ClientOrder) => {
+    setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+    setSelectedOrderId(order.id);
+  }, []);
 
   return (
-    <OrderContext.Provider value={{ orders, selectedOrderId, setSelectedOrderId, addOrder }}>
+    <OrderContext.Provider
+      value={{ orders, loading, error, refresh, selectedOrderId, setSelectedOrderId, addOrder }}
+    >
       {children}
     </OrderContext.Provider>
   );

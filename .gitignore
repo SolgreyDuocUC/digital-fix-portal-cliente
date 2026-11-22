@@ -1,0 +1,4 @@
+# Variables de docker-compose con secretos (usar .env.example como plantilla)
+.env
+.env.*
+!.env.example

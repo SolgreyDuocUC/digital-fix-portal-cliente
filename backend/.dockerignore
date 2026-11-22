@@ -1,0 +1,12 @@
+# Solo pom.xml y src entran a la imagen; el resto no debe copiarse (secretos, compilados, datos locales).
+target/
+data/
+.env
+.env.*
+!.env.example
+ejemplos-one-tech/
+.mvn/wrapper/maven-wrapper.jar
+.idea/
+.vscode/
+*.iml
+*.log

@@ -1,157 +1,160 @@
-import { ClientOrder, ClientOrderItem, TrackingStep } from "@/types/order";
+import { ClientOrder } from "@/types/order";
 import { CartItem } from "@/types/product";
-import { verifyAndHoldStock } from "./catalogService";
+import { api } from "./api";
 
-const STORAGE_KEY = "digitalfix_client_orders";
+/** PedidoResponseDTO del backend. */
+interface PedidoResponseDTO {
+  codigo: string;
+  origen: "PORTAL" | "ERP";
+  idOrdenTrabajo: number | null;
+  codigoSeguimiento: string | null;
+  fechaCreacion: string;
+  estado: string;
+  estadoEtiqueta: string | null;
+  seguimientoEnVivo: boolean;
+  hitos: Array<{ estado: string; etiqueta: string; descripcion: string | null; completado: boolean; actual: boolean }>;
+  cuadrilla: string | null;
+  fechaActualizacionEstado: string | null;
+  fechaCierre: string | null;
+  direccion: string | null;
+  horarioPreferido: string | null;
+  notas: string | null;
+  items: Array<{
+    tipo: "REPUESTO" | "SERVICIO";
+    id: number;
+    codigo: string | null;
+    nombre: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }> | null;
+  subtotal: number | null;
+  descuento: number | null;
+  total: number | null;
+  codigoCupon: string | null;
+}
 
 export interface CheckoutRequest {
-  fullName: string;
-  rut: string;
-  phone: string;
-  address: string;
-  preferredSchedule: string;
-  notes: string;
   cart: CartItem[];
-  subtotal: number;
+  address: {
+    street: string;
+    number: string;
+    detail?: string;
+    reference?: string;
+    postalCode?: string;
+    communeId: number;
+    commune?: string;
+  };
+  preferredSchedule?: string;
+  notes?: string;
+  couponCode?: string;
 }
 
-export function getStoredOrders(): ClientOrder[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
+const toOrder = (p: PedidoResponseDTO, clientName: string, clientRut: string): ClientOrder => {
+  const items = (p.items ?? []).map((i) => ({
+    productId: i.id,
+    kind: i.tipo,
+    code: i.codigo ?? "",
+    name: i.nombre,
+    category: i.tipo === "REPUESTO" ? "Repuesto" : "Servicio",
+    quantity: i.cantidad,
+    unitPrice: Number(i.precioUnitario),
+  }));
+  const first = items[0];
+  const title =
+    items.length === 0
+      ? p.origen === "ERP"
+        ? "Atención creada por la central"
+        : "Pedido"
+      : items.length === 1
+        ? first.name
+        : `${first.name} y ${items.length - 1} ítem(s) más`;
 
-export function saveStoredOrders(orders: ClientOrder[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
-  } catch (err) {
-    console.warn("Error guardando órdenes en localStorage:", err);
-  }
-}
+  return {
+    id: p.codigo,
+    numericId: p.idOrdenTrabajo ?? 0,
+    trackingCode: p.codigoSeguimiento ?? undefined,
+    origin: p.origen,
+    createdAt: p.fechaCreacion,
+    status: p.estado,
+    statusLabel: p.estadoEtiqueta ?? undefined,
+    liveTracking: p.seguimientoEnVivo,
+    serviceTitle: title,
+    categoryBadge: p.origen === "ERP" ? "Creada por la central" : "Compra en el portal",
+    address: p.direccion ?? "",
+    commune: "",
+    clientRut,
+    clientName,
+    totalAmount: Number(p.total ?? 0),
+    subtotal: p.subtotal != null ? Number(p.subtotal) : undefined,
+    discount: p.descuento != null ? Number(p.descuento) : undefined,
+    couponCode: p.codigoCupon ?? undefined,
+    deliveryDateEstimate: p.horarioPreferido ?? "",
+    preferredSchedule: p.horarioPreferido ?? undefined,
+    crew: p.cuadrilla ?? undefined,
+    statusUpdatedAt: p.fechaActualizacionEstado ?? undefined,
+    closedAt: p.fechaCierre ?? undefined,
+    notes: p.notas ?? undefined,
+    items,
+    trackingSteps: (p.hitos ?? []).map((h) => ({
+      status: h.estado,
+      label: h.etiqueta,
+      subtitle: h.descripcion ?? "",
+      completed: h.completado,
+      current: h.actual,
+    })),
+  };
+};
 
 /**
- * Procesa el checkout de un cliente:
- * 1. Verifica y reserva stock de repuestos en ms-catalog.
- * 2. Emite la orden hacia ms-workorders / API de órdenes.
- * 3. Persiste la orden creada en el historial local del cliente.
+ * Envía el carrito al backend: toma los precios del ERP, reserva el stock en ms-catalog y crea la
+ * Orden de Trabajo en ms-workorders (visible al instante en el portal de empleados).
  */
-export async function createClientOrder(req: CheckoutRequest): Promise<ClientOrder> {
-  // 1. Separar repuestos para verificar y reservar stock en ms-catalog
-  const repuestos = req.cart.filter((item) => item.category === "Repuestos");
-  if (repuestos.length > 0) {
-    const holdItems = repuestos.map((r) => ({
-      idRepuesto: r.id,
-      cantidad: r.quantity,
-    }));
-
-    const holdResult = await verifyAndHoldStock(holdItems, `CART-${req.rut.replace(/\D/g, "")}`);
-    if (!holdResult.exitoso) {
-      const faltantes = holdResult.detalles
-        .filter((d) => !d.disponible)
-        .map((d) => `${d.nombre} (solicitados: ${d.cantidadSolicitada}, disponibles: ${d.stockDisponibleReal})`)
-        .join(", ");
-      throw new Error(`Stock insuficiente para repuestos: ${faltantes}`);
-    }
-  }
-
-  // 2. Generar correlativo de la orden
-  const numericId = Math.floor(Math.random() * 900 + 1050);
-  const orderId = `DF-${numericId}`;
-  const now = new Date().toISOString();
-
-  // 3. Mapear ítems del carrito a ítems de la orden
-  const items: ClientOrderItem[] = req.cart.map((c) => ({
-    productId: c.id,
-    code: c.code,
-    name: c.name,
-    category: c.category,
-    quantity: c.quantity,
-    unitPrice: c.price,
-  }));
-
-  const mainItem = req.cart[0];
-  const serviceTitle = req.cart.length === 1
-    ? mainItem.name
-    : `${mainItem.name} + ${req.cart.length - 1} ítem(s) adicional(es)`;
-
-  const trackingSteps: TrackingStep[] = [
-    {
-      status: "CREADA",
-      label: "Orden Creada",
-      subtitle: "Solicitud registrada y validada",
-      timestamp: "Ahora mismo",
-      completed: true,
-      current: true,
+export async function createOrder(
+  req: CheckoutRequest,
+  client: { name: string; rut: string }
+): Promise<ClientOrder> {
+  const dto = await api<PedidoResponseDTO>("/orders", {
+    method: "POST",
+    body: {
+      items: req.cart.map((c) => ({ tipo: c.kind, id: c.id, cantidad: c.quantity })),
+      direccion: {
+        calle: req.address.street.trim(),
+        numero: req.address.number.trim(),
+        detalle: req.address.detail?.trim() || null,
+        referencia: req.address.reference?.trim() || null,
+        codigoPostal: req.address.postalCode?.trim() || null,
+        idComuna: req.address.communeId,
+        comuna: req.address.commune || null,
+      },
+      horarioPreferido: req.preferredSchedule || null,
+      notas: req.notes?.trim() || null,
+      codigoCupon: req.couponCode?.trim() || null,
     },
-    {
-      status: "ASIGNADA",
-      label: "Técnico Asignado",
-      subtitle: "Pendiente de despacho",
-      completed: false,
-      current: false,
-    },
-    {
-      status: "EN_DESPLAZAMIENTO",
-      label: "En Camino",
-      subtitle: "Técnico en ruta",
-      completed: false,
-      current: false,
-    },
-    {
-      status: "EN_EJECUCION",
-      label: "En Terreno",
-      subtitle: "Revisión técnica",
-      completed: false,
-      current: false,
-    },
-    {
-      status: "CERRADA",
-      label: "Finalizada",
-      subtitle: "Certificación SEC",
-      completed: false,
-      current: false,
-    },
-  ];
+  });
+  return toOrder(dto, client.name, client.rut);
+}
 
-  const newOrder: ClientOrder = {
-    id: orderId,
-    numericId,
-    createdAt: now,
-    status: "CREADA",
-    serviceTitle,
-    categoryBadge: "Urgencia SEC",
-    address: req.address,
-    commune: "Región Metropolitana",
-    clientRut: req.rut,
-    clientName: req.fullName,
-    totalAmount: req.subtotal,
-    deliveryDateEstimate: `Agendado: ${req.preferredSchedule}`,
-    notes: req.notes,
-    items,
-    trackingSteps,
-  };
+/** Pedidos del portal y OT que la central creó para el cliente, con su estado en vivo. */
+export async function fetchMyOrders(client: { name: string; rut: string }, signal?: AbortSignal): Promise<ClientOrder[]> {
+  const list = await api<PedidoResponseDTO[]>("/orders/my-orders", { signal });
+  return list.map((p) => toOrder(p, client.name, client.rut));
+}
 
-  // 4. Intentar enviar a ms-workorders si está disponible
-  try {
-    await fetch("/api/ordenes-trabajo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        idCliente: 1, // Cliente demo en ms-workorders
-        observaciones: `[Portal Cliente] ${req.notes || serviceTitle}. Dirección: ${req.address}. Horario: ${req.preferredSchedule}. RUT: ${req.rut}`,
-        servicios: [],
-      }),
-    });
-  } catch (err) {
-    console.info("ms-workorders no conectado directamente; persistiendo orden en backend cliente local:", err);
-  }
+// ---- Cupones ----
 
-  // 5. Persistir orden creada en local storage
-  const current = getStoredOrders();
-  saveStoredOrders([newOrder, ...current]);
+export interface CouponCheck {
+  codigo: string;
+  valido: boolean;
+  mensaje: string;
+  descuento: number;
+  totalConDescuento: number;
+}
 
-  return newOrder;
+/** Prueba un cupón contra el subtotal del carrito (no lo consume: se aplica al confirmar). */
+export async function checkCoupon(code: string, subtotal: number): Promise<CouponCheck> {
+  const r = await api<CouponCheck>(
+    `/promo-codes/${encodeURIComponent(code.trim())}?subtotal=${Math.max(0, Math.round(subtotal))}`
+  );
+  return { ...r, descuento: Number(r.descuento ?? 0), totalConDescuento: Number(r.totalConDescuento ?? subtotal) };
 }

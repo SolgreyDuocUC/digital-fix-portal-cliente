@@ -1,13 +1,218 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   Sistema visual del Portal Cliente DigitalFix.
+   Mismo patrón que el portal de empleados (digitalfix-frontend/src/styles/_tokens.scss):
+   tipografía Inter, escala de 4 px, radios de 6 a 14 px, sombras discretas, sin íconos.
+
+   Paleta DigitalFix
+     #005187  azul institucional   → acciones primarias, enlaces, estado activo
+     #4d82bc  azul medio           → hover suave, elementos secundarios
+     #84b6f4  azul claro           → acentos, focos
+     #c4dafa  azul tenue           → bordes de marca, fondos de selección
+     #fcffff  blanco azulado       → superficies
+
+   La paleta de Tailwind se redefine abajo (@theme): las familias de azul, celeste, índigo y
+   morado apuntan a la escala DigitalFix y los grises a neutros fríos. Así todos los componentes
+   quedan con colores parejos sin un color "suelto" por pantalla. Verde, ámbar y rojo quedan solo
+   para estados (éxito, aviso, error) y en tonos sobrios.
+   ============================================================================ */
+
+@theme {
+  /* Tipografía */
+  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Escala DigitalFix (azul) */
+  --color-brand-50: #f2f7fd;
+  --color-brand-100: #e4eefb;
+  --color-brand-200: #c4dafa;
+  --color-brand-300: #a4c8f7;
+  --color-brand-400: #84b6f4;
+  --color-brand-500: #4d82bc;
+  --color-brand-600: #005187;
+  --color-brand-700: #004673;
+  --color-brand-800: #003b61;
+  --color-brand-900: #00304f;
+  --color-brand-950: #00233a;
+  --color-superficie: #fcffff;
+
+  /* Azules, celestes, índigos y morados → escala DigitalFix */
+  --color-blue-50: #f2f7fd;   --color-blue-100: #e4eefb;  --color-blue-200: #c4dafa;
+  --color-blue-300: #a4c8f7;  --color-blue-400: #84b6f4;  --color-blue-500: #4d82bc;
+  --color-blue-600: #005187;  --color-blue-700: #004673;  --color-blue-800: #003b61;
+  --color-blue-900: #00304f;  --color-blue-950: #00233a;
+
+  --color-sky-50: #f2f7fd;    --color-sky-100: #e4eefb;   --color-sky-200: #c4dafa;
+  --color-sky-300: #a4c8f7;   --color-sky-400: #84b6f4;   --color-sky-500: #4d82bc;
+  --color-sky-600: #005187;   --color-sky-700: #004673;   --color-sky-800: #003b61;
+  --color-sky-900: #00304f;   --color-sky-950: #00233a;
+
+  --color-indigo-50: #f2f7fd;  --color-indigo-100: #e4eefb; --color-indigo-200: #c4dafa;
+  --color-indigo-300: #a4c8f7; --color-indigo-400: #84b6f4; --color-indigo-500: #4d82bc;
+  --color-indigo-600: #005187; --color-indigo-700: #004673; --color-indigo-800: #003b61;
+  --color-indigo-900: #00304f; --color-indigo-950: #00233a;
+
+  --color-purple-50: #f2f7fd;  --color-purple-100: #e4eefb; --color-purple-200: #c4dafa;
+  --color-purple-300: #a4c8f7; --color-purple-400: #84b6f4; --color-purple-500: #4d82bc;
+  --color-purple-600: #005187; --color-purple-700: #004673; --color-purple-800: #003b61;
+  --color-purple-900: #00304f; --color-purple-950: #00233a;
+
+  --color-violet-50: #f2f7fd;  --color-violet-100: #e4eefb; --color-violet-200: #c4dafa;
+  --color-violet-300: #a4c8f7; --color-violet-400: #84b6f4; --color-violet-500: #4d82bc;
+  --color-violet-600: #005187; --color-violet-700: #004673; --color-violet-800: #003b61;
+  --color-violet-900: #00304f; --color-violet-950: #00233a;
+
+  --color-cyan-50: #f2f7fd;    --color-cyan-100: #e4eefb;   --color-cyan-200: #c4dafa;
+  --color-cyan-300: #a4c8f7;   --color-cyan-400: #84b6f4;   --color-cyan-500: #4d82bc;
+  --color-cyan-600: #005187;   --color-cyan-700: #004673;   --color-cyan-800: #003b61;
+  --color-cyan-900: #00304f;   --color-cyan-950: #00233a;
+
+  /* Grises → neutros fríos (texto #1a1f2b, secundario #4b5563, borde #e4e8ee) */
+  --color-slate-50: #f7f9fc;   --color-slate-100: #f1f4f8;  --color-slate-200: #e4e8ee;
+  --color-slate-300: #cfd6df;  --color-slate-400: #9aa4b2;  --color-slate-500: #6b7585;
+  --color-slate-600: #4b5563;  --color-slate-700: #374151;  --color-slate-800: #1f2937;
+  --color-slate-900: #1a1f2b;  --color-slate-950: #111827;
+
+  --color-gray-50: #f7f9fc;    --color-gray-100: #f1f4f8;   --color-gray-200: #e4e8ee;
+  --color-gray-300: #cfd6df;   --color-gray-400: #9aa4b2;   --color-gray-500: #6b7585;
+  --color-gray-600: #4b5563;   --color-gray-700: #374151;   --color-gray-800: #1f2937;
+  --color-gray-900: #1a1f2b;   --color-gray-950: #111827;
+
+  /* Estados sobrios (mismos valores que exito / aviso / peligro del portal de empleados) */
+  --color-emerald-50: #eef8f1;  --color-emerald-100: #e7f6ec; --color-emerald-200: #b7e1c4;
+  --color-emerald-300: #8fcfa4; --color-emerald-400: #4fae6f; --color-emerald-500: #2f8f4e;
+  --color-emerald-600: #1a7f37; --color-emerald-700: #15803d; --color-emerald-800: #126a33;
+  --color-emerald-900: #0f572b; --color-emerald-950: #0a3a1d;
+  --color-green-50: #eef8f1;    --color-green-100: #e7f6ec;   --color-green-200: #b7e1c4;
+  --color-green-500: #2f8f4e;   --color-green-600: #1a7f37;   --color-green-700: #15803d;
+
+  --color-amber-50: #fff8ec;    --color-amber-100: #fff4e0;   --color-amber-200: #fcd9a4;
+  --color-amber-300: #f6c27a;   --color-amber-400: #e0a04a;   --color-amber-500: #c98a2e;
+  --color-amber-600: #b45309;   --color-amber-700: #92600a;   --color-amber-800: #7a4f08;
+  --color-amber-900: #5f3d06;   --color-amber-950: #3d2704;
+  --color-yellow-50: #fff8ec;   --color-yellow-100: #fff4e0;  --color-yellow-200: #fcd9a4;
+  --color-yellow-400: #e0a04a;  --color-yellow-500: #c98a2e;  --color-yellow-600: #b45309;
+  --color-orange-50: #fff8ec;   --color-orange-100: #fff4e0;  --color-orange-200: #fcd9a4;
+  --color-orange-500: #c98a2e;  --color-orange-600: #b45309;  --color-orange-700: #92600a;
+
+  --color-red-50: #fdf3f2;      --color-red-100: #fdecec;     --color-red-200: #f8c9c5;
+  --color-red-300: #f0a19a;     --color-red-400: #d9665c;     --color-red-500: #c2392d;
+  --color-red-600: #b42318;     --color-red-700: #912018;     --color-red-800: #741a14;
+  --color-red-900: #5a150f;     --color-red-950: #3a0d0a;
+  --color-rose-50: #fdf3f2;     --color-rose-100: #fdecec;    --color-rose-200: #f8c9c5;
+  --color-rose-500: #c2392d;    --color-rose-600: #b42318;    --color-rose-700: #912018;
+  --color-pink-50: #fdf3f2;     --color-pink-100: #fdecec;    --color-pink-500: #c2392d;
+  --color-pink-600: #b42318;    --color-pink-700: #912018;
+
+  /* Forma: radios contenidos (6–14 px) en vez de esquinas muy redondeadas */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 14px;
+
+  /* Sombras discretas */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 10px -4px rgba(16, 24, 40, 0.10), 0 2px 4px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 8px 20px -8px rgba(16, 24, 40, 0.14);
+  --shadow-xl: 0 16px 32px -12px rgba(16, 24, 40, 0.20);
+  --shadow-2xl: 0 20px 40px -12px rgba(16, 24, 40, 0.24);
+}
+
 @layer base {
-  :root {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  html {
+    -webkit-text-size-adjust: 100%;
   }
   body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    background-color: #f4f7fb;
+    color: var(--color-slate-900);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  /* Foco visible solo con teclado, mismo anillo en toda la app */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+  ::placeholder {
+    color: #9aa4b2;
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   Piezas compartidas (mismo vocabulario que styles/_components.scss del portal de empleados).
+   Se usan como clases normales: <section className="panel">, <button className="btn-primary">.
+   ============================================================================ */
+@layer components {
+  .page-head {
+    @apply flex flex-wrap items-end justify-between gap-4 mb-5;
+  }
+  .page-head h1 {
+    @apply m-0 text-2xl font-bold tracking-tight text-slate-900;
+  }
+  .page-head p {
+    @apply mt-1 text-[13px] text-slate-600;
+  }
+
+  .panel {
+    @apply bg-white border border-slate-200 rounded-2xl shadow-sm;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 min-h-[38px] px-4 rounded-lg text-[13px] font-semibold
+      whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white hover:bg-brand-700;
+  }
+  .btn-secondary {
+    @apply bg-white text-slate-900 border border-slate-300 hover:bg-slate-50;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-brand-600 hover:bg-brand-50;
+  }
+
+  .input {
+    @apply w-full h-[38px] px-3 rounded-lg border border-slate-300 bg-white text-[13px] text-slate-900
+      outline-none transition focus:border-brand-600 focus:ring-3 focus:ring-brand-200;
+  }
+
+  .label {
+    @apply block text-xs font-semibold text-slate-700 mb-1.5;
+  }
+
+  /* Píldora de estado: suave, con texto del mismo tono */
+  .badge {
+    @apply inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-semibold whitespace-nowrap;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500;
   }
 }
 
@@ -17,7 +222,7 @@
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -27,13 +232,22 @@
 }
 
 .animate-fadeIn {
-  animation: fadeIn 200ms ease-out forwards;
+  animation: fadeIn 180ms ease-out forwards;
 }
 
 .animate-slideUp {
-  animation: slideUp 250ms ease-out forwards;
+  animation: slideUp 220ms ease-out forwards;
 }
 
 .animate-slideInRight {
-  animation: slideInRight 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInRight 260ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

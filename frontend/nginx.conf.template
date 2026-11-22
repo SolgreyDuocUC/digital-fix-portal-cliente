@@ -1,0 +1,44 @@
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # DNS interno de Docker: el nombre del backend se resuelve en cada petición, así nginx
+    # arranca aunque el backend todavía no esté listo.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+
+    # API del portal → backend (mismo origen para el navegador).
+    location /api/v1/ {
+        set $portal_backend ${PORTAL_BACKEND_URL};
+        proxy_pass $portal_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # SPA: toda ruta desconocida carga index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # index.html sin caché, para que cada despliegue se vea de inmediato
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # Recursos con hash en el nombre: caché larga
+    location /assets/ {
+        expires 6M;
+        access_log off;
+        add_header Cache-Control "public, max-age=15552000, immutable";
+    }
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+}

@@ -8,21 +8,15 @@ interface SectionHeaderProps {
   onAction?: () => void;
 }
 
-export const SectionHeader: React.FC<SectionHeaderProps> = ({
-  title,
-  meta,
-  note,
-  actionLabel,
-  onAction,
-}) => (
-  <div className="flex items-baseline justify-between gap-4 px-1">
-    <h2 className="text-lg font-semibold text-slate-800">
+export const SectionHeader: React.FC<SectionHeaderProps> = ({ title, meta, note, actionLabel, onAction }) => (
+  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <h2 className="text-lg font-semibold tracking-tight text-slate-900">
       {title}
-      {meta && <span className="text-sm text-slate-400 font-normal ml-2">{meta}</span>}
+      {meta && <span className="text-[13px] text-slate-500 font-normal ml-2">{meta}</span>}
     </h2>
     {note && <span className="text-xs text-slate-500">{note}</span>}
     {actionLabel && onAction && (
-      <button onClick={onAction} className="text-sm text-blue-600 hover:text-blue-700 transition">
+      <button onClick={onAction} className="btn-ghost min-h-[32px] px-3 text-xs">
         {actionLabel}
       </button>
     )}

@@ -1,7 +1,8 @@
 import React, { ReactNode } from "react";
 
+/** Fondo de página único (el del body); el contenido va en paneles blancos. */
 export const PageShell: React.FC<{ children: ReactNode }> = ({ children }) => (
-  <div className="bg-sky-50/60 min-h-screen">{children}</div>
+  <div className="min-h-screen">{children}</div>
 );
 
 export const Container: React.FC<{ children: ReactNode; className?: string }> = ({

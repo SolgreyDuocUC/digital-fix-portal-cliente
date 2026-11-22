@@ -1,5 +1,6 @@
 import React from "react";
-import { ElectricalProduct } from "@/types/product";
+import { ElectricalProduct, itemKey } from "@/types/product";
+import { useCatalog } from "@/hooks/useCatalog";
 import { CatalogCard } from "./CatalogCard";
 
 interface CatalogGridProps {
@@ -17,10 +18,23 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
   emptyMessage = "No se encontraron resultados para el filtro seleccionado.",
   columnsClassName = "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
 }) => {
+  const { loading, error, reload } = useCatalog();
+
   if (items.length === 0) {
     return (
-      <div className="bg-white rounded-lg p-10 text-center shadow-sm text-sm text-slate-500">
-        {emptyMessage}
+      <div className="panel p-10 text-center text-sm text-slate-500">
+        {loading ? (
+          "Cargando catálogo..."
+        ) : error ? (
+          <>
+            <p className="text-slate-700">{error}</p>
+            <button onClick={reload} className="btn-secondary mt-4">
+              Reintentar
+            </button>
+          </>
+        ) : (
+          emptyMessage
+        )}
       </div>
     );
   }
@@ -28,7 +42,7 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
   return (
     <div className={`grid gap-4 ${columnsClassName}`}>
       {items.map((item) => (
-        <CatalogCard key={item.id} item={item} actionLabel={actionLabel} onAction={onAction} />
+        <CatalogCard key={itemKey(item)} item={item} actionLabel={actionLabel} onAction={onAction} />
       ))}
     </div>
   );

@@ -10,8 +10,6 @@
     "format": "oxfmt"
   },
   "dependencies": {
-    "@lineiconshq/free-icons": "^1.0.7",
-    "@lineiconshq/react-lineicons": "^1.0.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -1,7 +1,10 @@
-import React, { useState } from "react";
-import { AuthProvider } from "./contexts/AuthContext";
+import React, { useEffect, useState } from "react";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContext";
 import { OrderProvider } from "./contexts/OrderContext";
+import { CommercialProvider } from "./contexts/CommercialContext";
+import { CatalogProvider } from "./contexts/CatalogContext";
+import { StaffHeader } from "./components/Layout/StaffHeader";
 import { Header } from "./components/Layout/Header";
 import { Footer } from "./components/Layout/Footer";
 import { HomePage } from "./components/Pages/1-Home/HomePage";
@@ -12,13 +15,21 @@ import { MyOrdersPage } from "./components/Pages/5-MyOrders/MyOrdersPage";
 import { CartDrawer } from "./components/Pages/3-Cart/CartDrawer";
 import { CheckoutModal } from "./components/Pages/4-Checkout/CheckoutModal";
 import { LoginPage } from "./components/Pages/6-Login/LoginPage";
+import { Registro } from "./components/Pages/7-Register/Registro";
 import { ProfilePage } from "./components/Pages/8-Profile/ProfilePage";
-import { Icon } from "./components/ui/Icon";
+import { MarketingView } from "./components/Pages/9-Vista-Marketing/MarketingView";
+import { MarketingCampaignsView } from "./components/Pages/9-Vista-Marketing/MarketingCampaignsView";
+import { VendorPortalView } from "./components/Pages/10-Vendor/VendorPortalView";
+import { SalesHeadPortalView } from "./components/Pages/11-SalesHead/SalesHeadPortalView";
 import { CatalogView } from "./types/catalog";
 
-type NavTab = "catalog" | "my-orders" | "profile";
+type NavTab = "catalog" | "my-orders" | "profile" | "marketing";
 
 const PortalContent: React.FC = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  // Sin sesión se navega la tienda como cliente; el rol interno solo se obtiene ingresando con esa cuenta.
+  const currentRole = user?.role || "CLIENTE";
+
   const [currentTab, setCurrentTab] = useState<NavTab>("catalog");
   const [catalogView, setCatalogView] = useState<CatalogView>("home");
   const [search, setSearch] = useState<string>("");
@@ -26,10 +37,16 @@ const PortalContent: React.FC = () => {
   const [cartOpen, setCartOpen] = useState<boolean>(false);
   const [checkoutOpen, setCheckoutOpen] = useState<boolean>(false);
   const [loginOpen, setLoginOpen] = useState<boolean>(false);
+  const [registerOpen, setRegisterOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Al cerrar sesión desde Mi cuenta se vuelve a la tienda.
+  useEffect(() => {
+    if (!user && currentTab === "profile") setCurrentTab("catalog");
+  }, [user, currentTab]);
+
   const handleCheckoutSuccess = (newOrderId: string) => {
-    setToastMessage(`¡Orden ${newOrderId} creada exitosamente! La cuadrilla ha sido notificada en terreno.`);
+    setToastMessage(`La orden ${newOrderId} fue enviada a la central. Puedes seguir su avance aquí.`);
     setCurrentTab("my-orders");
     setTimeout(() => {
       setToastMessage(null);
@@ -42,100 +59,171 @@ const PortalContent: React.FC = () => {
     if (category) setSelectedCategory(category);
   };
 
+  /** Pestañas de categorías del encabezado. */
+  const handleBrowse = (category: string) => {
+    setCurrentTab("catalog");
+    if (category === "Repuestos") {
+      setCatalogView("products");
+    } else if (category === "Todos") {
+      setSelectedCategory("Todos");
+      setCatalogView("home");
+    } else {
+      setSelectedCategory(category);
+      setCatalogView("services");
+    }
+  };
+
+  const handleProceedCheckout = () => {
+    setCartOpen(false);
+    // El pedido queda a nombre de una cuenta: sin sesión, primero se ingresa (el carrito se conserva).
+    if (isAuthenticated) setCheckoutOpen(true);
+    else setLoginOpen(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Cargando portal...</div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100/70 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] text-slate-900 selection:bg-blue-600 selection:text-white">
-      {/* Header Corporativo estilo United Deals / Mercado Libre */}
-      <Header
-        currentTab={currentTab}
-        onTabChange={(tab) => {
-          setCurrentTab(tab);
-          if (tab === "catalog") setCatalogView("home");
-        }}
-        search={search}
-        onSearchChange={setSearch}
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
-        onOpenCart={() => setCartOpen(true)}
-        onOpenLogin={() => setLoginOpen(true)}
-      />
+    <div className="min-h-screen flex flex-col text-slate-900">
+      {/* ROL: VENDEDOR / ASESOR EN TERRENO (Maipú / Asesoría) */}
+      {currentRole === "VENDEDOR" && (
+        <div className="flex-1 flex flex-col">
+          <StaffHeader />
+          <main className="flex-1">
+            <VendorPortalView />
+          </main>
+          <Footer />
+        </div>
+      )}
 
-      {/* Contenido principal según pestaña seleccionada */}
-      <main className="flex-1">
-        {currentTab === "catalog" && (
-          <>
-            {/* Barra de pestañas interna: Inicio / Servicios / Productos */}
-            <CatalogTabs active={catalogView} onChange={setCatalogView} />
+      {/* ROL: ASISTENTE DE OPERACIONES COMERCIALES (Marketing & Campañas) */}
+      {currentRole === "ASISTENTE_MARKETING" && (
+        <div className="flex-1 flex flex-col">
+          <StaffHeader />
+          <main className="flex-1">
+            <MarketingCampaignsView />
+          </main>
+          <Footer />
+        </div>
+      )}
 
-            {catalogView === "home" && (
-              <HomePage
-                onNavigate={handleCatalogNavigate}
-                onOpenOrderTracking={() => setCurrentTab("my-orders")}
+      {/* ROL: JEFE DE VENTAS Y OPERACIONES (Aprobación & KPIs) */}
+      {currentRole === "JEFE_VENTAS" && (
+        <div className="flex-1 flex flex-col">
+          <StaffHeader />
+          <main className="flex-1">
+            <SalesHeadPortalView />
+          </main>
+          <Footer />
+        </div>
+      )}
+
+      {/* ROL: CLIENTE B2C / B2B (E-commerce Desacoplado estilo Mercado Libre) */}
+      {currentRole === "CLIENTE" && (
+        <>
+          <Header
+            currentTab={currentTab}
+            onTabChange={(tab) => {
+              setCurrentTab(tab);
+              if (tab === "catalog") setCatalogView("home");
+            }}
+            catalogView={catalogView}
+            search={search}
+            onSearchChange={setSearch}
+            selectedCategory={selectedCategory}
+            onBrowse={handleBrowse}
+            onOpenCart={() => setCartOpen(true)}
+            onOpenLogin={() => setLoginOpen(true)}
+            onOpenRegister={() => setRegisterOpen(true)}
+          />
+
+          <main className="flex-1">
+            {currentTab === "catalog" && (
+              <>
+                <CatalogTabs active={catalogView} onChange={setCatalogView} />
+
+                {catalogView === "home" && (
+                  <HomePage
+                    onNavigate={handleCatalogNavigate}
+                    onOpenOrderTracking={() => setCurrentTab("my-orders")}
+                  />
+                )}
+
+                {catalogView === "services" && (
+                  <ServicesPage
+                    searchQuery={search}
+                    selectedCategory={selectedCategory}
+                    onSelectCategory={setSelectedCategory}
+                  />
+                )}
+
+                {catalogView === "products" && (
+                  <ProductsPage searchQuery={search} />
+                )}
+              </>
+            )}
+
+            {currentTab === "my-orders" && (
+              <MyOrdersPage
+                onLogin={() => setLoginOpen(true)}
+                onGoToCatalog={() => handleBrowse("Todos")}
               />
             )}
 
-            {catalogView === "services" && (
-              <ServicesPage
-                searchQuery={search}
-                selectedCategory={selectedCategory}
-                onSelectCategory={setSelectedCategory}
-              />
-            )}
+            {currentTab === "profile" && <ProfilePage onOpenOrderTracking={() => setCurrentTab("my-orders")} />}
 
-            {catalogView === "products" && (
-              <ProductsPage searchQuery={search} />
-            )}
-          </>
-        )}
+            {currentTab === "marketing" && <MarketingView />}
+          </main>
 
-        {currentTab === "my-orders" && <MyOrdersPage />}
+          <Footer />
 
-        {currentTab === "profile" && <ProfilePage />}
-      </main>
+          {/* Drawer lateral de Carrito */}
+          <CartDrawer
+            isOpen={cartOpen}
+            onClose={() => setCartOpen(false)}
+            onProceedCheckout={handleProceedCheckout}
+          />
 
-      {/* Pie de página con enlaces y certificaciones */}
-      <Footer />
+          {/* Modal de Despacho y Confirmación de Orden */}
+          <CheckoutModal
+            isOpen={checkoutOpen}
+            onClose={() => setCheckoutOpen(false)}
+            onSuccess={handleCheckoutSuccess}
+          />
+        </>
+      )}
 
-      {/* Drawer lateral de Carrito */}
-      <CartDrawer
-        isOpen={cartOpen}
-        onClose={() => setCartOpen(false)}
-        onProceedCheckout={() => {
-          setCartOpen(false);
-          setCheckoutOpen(true);
-        }}
-      />
-
-      {/* Modal de Despacho y Confirmación de Orden */}
-      <CheckoutModal
-        isOpen={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
-        onSuccess={handleCheckoutSuccess}
-      />
-
-      {/* Modal de Ingreso Cliente (Aislado de Entra ID) */}
+      {/* Modales globales de Autenticación */}
       <LoginPage
         isOpen={loginOpen}
         onClose={() => setLoginOpen(false)}
         onSwitchToRegister={() => {
-          alert("Los nuevos clientes se registran automáticamente al realizar su primer pedido de visita técnica o repuestos.");
+          setLoginOpen(false);
+          setRegisterOpen(true);
+        }}
+      />
+
+      <Registro
+        isOpen={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        onSwitchToLogin={() => {
+          setRegisterOpen(false);
+          setLoginOpen(true);
         }}
       />
 
       {/* Notificación flotante de confirmación estilo Mercado Libre */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-950 text-white px-5 py-4 rounded-2xl shadow-2xl border border-slate-800 flex items-center gap-3.5 max-w-md animate-slideUp">
-          <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-            <Icon name="check" size={18} />
-          </div>
-          <div className="flex-1 text-xs">
-            <strong className="block text-white font-bold mb-0.5">Despacho Coordinado</strong>
-            <span className="text-slate-300 leading-normal">{toastMessage}</span>
-          </div>
-          <button
-            onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-white p-1"
-          >
-            <Icon name="close" size={16} />
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 left-6 sm:left-auto z-50 bg-white border border-slate-200 border-l-4 border-l-brand-600 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 sm:max-w-md animate-slideUp"
+        >
+          <p className="flex-1 text-sm text-slate-700 leading-snug">{toastMessage}</p>
+          <button onClick={() => setToastMessage(null)} className="btn-ghost shrink-0">
+            Cerrar
           </button>
         </div>
       )}
@@ -146,11 +234,15 @@ const PortalContent: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <OrderProvider>
-        <CartProvider>
-          <PortalContent />
-        </CartProvider>
-      </OrderProvider>
+      <CatalogProvider>
+        <OrderProvider>
+          <CartProvider>
+            <CommercialProvider>
+              <PortalContent />
+            </CommercialProvider>
+          </CartProvider>
+        </OrderProvider>
+      </CatalogProvider>
     </AuthProvider>
   );
 }

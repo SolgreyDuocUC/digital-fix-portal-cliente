@@ -11,62 +11,87 @@ interface CatalogCardProps {
   imageSrc?: string;
 }
 
-/** Tarjeta única para servicios y productos: no conoce el carrito, solo avisa que se pulsó la acción. */
-export const CatalogCard: React.FC<CatalogCardProps> = ({
-  item,
-  actionLabel,
-  onAction,
-  imageSrc,
-}) => {
+/** Tarjeta única para servicios y repuestos: imagen, datos clave en filas y una sola acción. */
+export const CatalogCard: React.FC<CatalogCardProps> = ({ item, actionLabel, onAction, imageSrc }) => {
   const discount = discountOf(item.price, item.originalPrice);
+  const effectiveImage = imageSrc || item.imageUrl;
 
   return (
-    <article className="bg-white rounded-lg shadow-sm hover:shadow-md transition overflow-hidden flex flex-col">
-      <ImageSlot src={imageSrc} alt={item.name} className="aspect-[4/3] border-b border-sky-100" />
+    <article className="panel overflow-hidden flex flex-col transition-colors hover:border-brand-300">
+      {/* Solo con foto real (Marketing la vincula desde Google Drive); sin foto no se dibuja relleno. */}
+      {effectiveImage && (
+        <ImageSlot src={effectiveImage} alt={item.name} className="aspect-[4/3] border-b border-slate-200" />
+      )}
 
-      <div className="p-4 flex flex-col flex-1 gap-1.5">
-        {item.highlightBadge && (
-          <span className="self-start text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-            {item.highlightBadge}
-          </span>
-        )}
+      <div className="p-4 flex flex-col flex-1 gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-medium text-slate-500 tabular-nums">{item.code}</span>
+          {item.highlightBadge && (
+            <span className="badge bg-brand-50 text-brand-600 border border-brand-100">{item.highlightBadge}</span>
+          )}
+        </div>
 
-        <h3 className="text-sm text-slate-800 leading-snug line-clamp-2">{item.name}</h3>
+        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">{item.name}</h3>
         <p className="text-xs text-slate-500 leading-normal line-clamp-2">{item.description}</p>
 
         <div className="mt-1">
-          {item.originalPrice && (
-            <span className="text-xs text-slate-400 line-through block">
-              {formatPrice(item.originalPrice)}
-            </span>
+          {item.originalPrice && discount > 0 && (
+            <span className="text-xs text-slate-400 line-through mr-2 tabular-nums">{formatPrice(item.originalPrice)}</span>
           )}
           <div className="flex items-baseline gap-2">
-            <strong className="text-2xl font-normal text-slate-900">
-              {formatPrice(item.price)}
-            </strong>
-            {discount > 0 && (
-              <span className="text-xs font-semibold text-emerald-600">{discount}% OFF</span>
-            )}
+            <strong className="text-xl font-bold text-slate-900 tabular-nums">{formatPrice(item.price)}</strong>
+            {discount > 0 && <span className="badge bg-brand-50 text-brand-600">{discount}% menos</span>}
           </div>
         </div>
 
-        <div className="text-xs space-y-0.5">
-          {item.freeDispatch && (
-            <p className="text-emerald-600 font-semibold">Envío gratis</p>
+        <dl className="text-xs divide-y divide-slate-100 border-t border-slate-100 mt-1">
+          {item.brand && (
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Marca</dt>
+              <dd className="font-medium text-slate-800">{item.brand}</dd>
+            </div>
           )}
-          <p className="text-slate-500">{item.responseTime}</p>
-          <p className="text-slate-500">Garantía: {item.warrantyMonths} meses</p>
+          {item.responseTime && (
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Tiempo estimado</dt>
+              <dd className="font-medium text-slate-800">{item.responseTime}</dd>
+            </div>
+          )}
+          {item.warrantyMonths && (
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Garantía</dt>
+              <dd className="font-medium text-slate-800">{item.warrantyMonths} meses</dd>
+            </div>
+          )}
+          {item.secCertified && (
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Certificación</dt>
+              <dd className="font-medium text-slate-800">SEC</dd>
+            </div>
+          )}
           {item.stock !== undefined && (
-            <p className="text-slate-500">{item.stock} disponibles</p>
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Stock</dt>
+              <dd className={`font-medium tabular-nums ${item.stock > 0 ? "text-slate-800" : "text-red-600"}`}>
+                {item.stock > 0 ? `${item.stock} ${item.stock === 1 ? "unidad" : "unidades"}` : "Sin stock"}
+              </dd>
+            </div>
           )}
-        </div>
+          {item.freeDispatch && (
+            <div className="flex justify-between py-1.5">
+              <dt className="text-slate-500">Despacho</dt>
+              <dd className="font-medium text-slate-800">Sin costo</dd>
+            </div>
+          )}
+        </dl>
 
-        <div className="mt-auto pt-3">
+        <div className="mt-auto pt-2">
           <button
             onClick={() => onAction(item)}
-            className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-sm py-2.5 rounded-md transition"
+            disabled={item.kind === "REPUESTO" && (item.stock ?? 0) <= 0}
+            className="btn-secondary w-full hover:border-brand-600 hover:text-brand-600"
           >
-            {actionLabel}
+            {item.kind === "REPUESTO" && (item.stock ?? 0) <= 0 ? "Sin stock" : actionLabel}
           </button>
         </div>
       </div>

@@ -1,0 +1,15 @@
+# Pruebas: base en memoria, secreto fijo y microservicios simulados (@MockitoBean de los clientes remotos).
+spring:
+  datasource:
+    url: jdbc:h2:mem:portal_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+portal:
+  jwt:
+    secreto: secreto-de-pruebas-del-portal-cliente-0123456789
+  datos-demo: false
+  servicios-externos:
+    ms-workorders:
+      api-key: clave-de-pruebas

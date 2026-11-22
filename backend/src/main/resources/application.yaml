@@ -1,3 +1,70 @@
+# Backend del Portal Cliente DigitalFix (monolito).
+# Swagger UI: http://localhost:8090/swagger-ui.html
+#
+# Es dueño de: usuarios del portal (identidad local), datos comerciales de la tienda, cupones y pedidos.
+# Consume: ms-catalog (repuestos y reserva de stock) y ms-workorders (servicios, órdenes y seguimiento).
+
 spring:
   application:
-    name: portal.cl
+    name: digitalfix-portal-cliente
+
+  # Carga el .env de la carpeta del backend (si existe). Ver .env.example.
+  # portal.dir-env lo fija Application al arrancar, para no leer por error el .env general de
+  # DigitalFix cuando el IDE lanza la app desde la raíz del proyecto.
+  config:
+    import: optional:file:${portal.dir-env:.}/.env[.properties]
+
+  # portal_db. Por defecto H2 en archivo (desarrollo sin instalar nada); en Docker/EC2 se
+  # define SPRING_DATASOURCE_URL apuntando a PostgreSQL (jdbc:postgresql://host:5432/portal_db).
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:${portal.dir-env:.}/data/portal_db;MODE=PostgreSQL;AUTO_SERVER=TRUE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_DDL_AUTO:update}
+    # Sin OSIV: las entidades que se arman al leer el catálogo nunca se guardan por accidente.
+    open-in-view: false
+
+server:
+  port: ${SERVER_PORT:8090}
+  error:
+    include-message: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+portal:
+  # Orígenes del frontend del portal (Vite en desarrollo).
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+  jwt:
+    # Secreto HS256 de al menos 32 caracteres. Si falta, se genera uno al azar al arrancar
+    # (los tokens dejan de valer al reiniciar): solo aceptable en desarrollo.
+    secreto: ${PORTAL_JWT_SECRET:}
+    expiracion-minutos: ${PORTAL_JWT_EXPIRACION_MINUTOS:60}
+    expiracion-refresh-dias: ${PORTAL_JWT_EXPIRACION_REFRESH_DIAS:7}
+    emisor: digitalfix-portal-cliente
+
+  # Crea usuarios demo (cliente, vendedor, marketing) y un cupón de ejemplo si la base está vacía.
+  datos-demo: ${PORTAL_DATOS_DEMO:false}
+
+  stock:
+    # Minutos que ms-catalog retiene el stock de los repuestos de un pedido.
+    minutos-reserva: ${PORTAL_MINUTOS_RESERVA_STOCK:30}
+
+  servicios-externos:
+    ms-catalog:
+      url: ${MS_CATALOG_URL:http://localhost:8088}
+    ms-workorders:
+      url: ${MS_WORKORDERS_URL:http://localhost:8085}
+      # Misma clave que PORTAL_API_KEY de ms-workorders (header X-Portal-Api-Key).
+      api-key: ${MS_WORKORDERS_API_KEY:}
+    timeout-conexion-ms: ${MS_TIMEOUT_CONEXION_MS:3000}
+    timeout-lectura-ms: ${MS_TIMEOUT_LECTURA_MS:10000}

@@ -1,9 +1,11 @@
 package df.portal.cl.model.productos;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,20 +16,34 @@ import java.time.OffsetDateTime;
  * Integra la informacion base proveniente de los microservicios centrales (ms-catalog) y permite
  * al equipo de Marketing enriquecerlos con vinculos de imagenes desde Google Drive, badges promocionales,
  * categorias comerciales y descuentos para campanas.
+ *
+ * Persistencia: solo existe una fila cuando Marketing personalizó el item. Los datos base
+ * (nombre, precio, stock) se vuelven a leer del microservicio en cada consulta y se copian
+ * aqui en memoria con {@link #sincronizarDesdeMicroservicio}; la fila guardada es la capa comercial.
  */
-@Data
+@Entity
+@Table(name = "producto_tienda",
+        uniqueConstraints = @UniqueConstraint(name = "uk_producto_tienda_item",
+                columnNames = {"tipo_item", "id_microservicio"}))
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProductoTienda {
 
     /** Identificador unico del producto en la tienda del portal */
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long idProductoTienda;
 
     /** ID de referencia en el microservicio central (ms-catalog: idRepuesto o idServicio) */
+    @Column(name = "id_microservicio", nullable = false)
     private Long idMicroservicio;
 
     /** Tipo de item: REPUESTO fisico o SERVICIO tecnico en terreno */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_item", nullable = false, length = 20)
     private TipoItemTienda tipoItem;
 
     /** Codigo SKU visible (ej: REP-0001, SRV-EMG-01) */
@@ -37,6 +53,7 @@ public class ProductoTienda {
     private String nombreBase;
 
     /** Descripcion tecnica original proveniente del microservicio */
+    @Column(length = 1000)
     private String descripcionBase;
 
     /** Precio de lista o tarifa oficial en CLP (sin descuento) */
@@ -51,6 +68,14 @@ public class ProductoTienda {
     /** Indica si el producto cuenta con certificacion u homologacion SEC oficial */
     private boolean certificacionSEC;
 
+    /** Marca o proveedor informado por ms-catalog (solo en memoria; no es dato de tienda). */
+    @Transient
+    private String marca;
+
+    /** Categoria tecnica que informa el microservicio (solo en memoria). */
+    @Transient
+    private String categoriaBase;
+
     // =========================================================================
     // Atributos administrados por el Equipo de Marketing (Portal Comercial)
     // =========================================================================
@@ -59,6 +84,7 @@ public class ProductoTienda {
     private String nombreComercial;
 
     /** Resena comercial o copy promocional redactado por marketing */
+    @Column(length = 1000)
     private String descripcionComercial;
 
     /** Categoria comercial de navegacion en tienda (ej: Tableros & Fuerza, Protecciones, etc.) */

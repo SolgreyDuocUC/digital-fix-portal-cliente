@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { useCart } from "../../../contexts/CartContext";
 import { ElectricalProduct, ServiceCategory } from "../../../types/product";
 import { formatPrice } from "../../../utils/currency";
-import { Icon } from "../../ui/Icon";
 import { ELECTRICAL_CATALOG } from "@/mocks/catalogo";
 
 
@@ -71,7 +70,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
               <span className="text-xs font-semibold text-blue-700">
                 Exclusivo para empresas e inmuebles
               </span>
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 leading-tight">
                 Mantención eléctrica y servicio en terreno
               </h1>
               <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
@@ -90,7 +89,6 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
                   onClick={onOpenOrderTracking}
                   className="bg-white hover:bg-sky-50 text-blue-700 text-sm font-semibold px-5 py-3 rounded-md transition flex items-center gap-2 shadow-sm"
                 >
-                  <Icon name="truck" size={15} />
                   <span>Ver mis órdenes</span>
                 </button>
               </div>

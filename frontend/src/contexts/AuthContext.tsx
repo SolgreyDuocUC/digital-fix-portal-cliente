@@ -1,113 +1,82 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { AuthState, ClientUser, LoginCredentials, RegisterData } from "../types/auth";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { AuthState, ClientUser, LoginCredentials, ProfileUpdate, RegisterData } from "../types/auth";
+import * as authService from "../services/authService";
+import { ApiError, SESSION_EXPIRED_EVENT } from "../services/api";
 
 interface AuthContextType extends AuthState {
-  login: (credentials: LoginCredentials) => Promise<boolean>;
-  register: (data: RegisterData) => Promise<boolean>;
+  /** Lanza ApiError si las credenciales no coinciden. El rol sale de la cuenta. */
+  login: (credentials: LoginCredentials) => Promise<ClientUser>;
+  register: (data: RegisterData) => Promise<ClientUser>;
+  updateProfile: (changes: ProfileUpdate) => Promise<ClientUser>;
   logout: () => void;
 }
 
-const STORAGE_KEY = "digitalfix_client_token";
-const USER_KEY = "digitalfix_client_user";
-
-const DEMO_USER: ClientUser = {
-  id: "client-1001",
-  fullName: "Comercial Rojas Ltda.",
-  email: "contacto@comercialrojas.cl",
-  rut: "76.123.456-7",
-  phone: "+56 9 8765 4321",
-  address: "Av. Providencia 1234, Of. 602, Santiago",
-  role: "CLIENTE",
-};
+/**
+ * Cuentas que crea el backend con PORTAL_DATOS_DEMO=true (config/DataInitializer).
+ * El login las ofrece para probar cada rol por el mismo camino que usaría una persona real.
+ */
+export const DEMO_ACCOUNTS = [
+  { role: "Cliente", email: "cliente@digitalfix.cl", password: "Cliente123!" },
+  { role: "Vendedor", email: "vendedor@digitalfix.cl", password: "Vendedor123!" },
+  { role: "Marketing", email: "marketing@digitalfix.cl", password: "Marketing123!" },
+  { role: "Jefe de ventas", email: "jefe@digitalfix.cl", password: "JefeVentas123!" },
+] as const;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<ClientUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Retoma la sesión guardada validándola contra el backend.
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(STORAGE_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } else {
-        // Inicializar con usuario demo activo para fluidez de testing
-        setToken("mock-jwt-client-token-digitalfix");
-        setUser(DEMO_USER);
-        localStorage.setItem(STORAGE_KEY, "mock-jwt-client-token-digitalfix");
-        localStorage.setItem(USER_KEY, JSON.stringify(DEMO_USER));
-      }
-    } catch {
-      // Ignorar fallas de lectura
-    } finally {
-      setIsLoading(false);
-    }
+    let vigente = true;
+    authService
+      .currentUser()
+      .then((u) => vigente && setUser(u))
+      .catch((err) => {
+        // Si el backend no responde se conserva la sesión para reintentar luego; si la rechaza, se cierra.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) authService.logout();
+      })
+      .finally(() => vigente && setIsLoading(false));
+    return () => {
+      vigente = false;
+    };
   }, []);
 
-  const login = async (credentials: LoginCredentials): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      // Aislamiento: El cliente se autentica localmente sin consultar Microsoft Entra ID
-      const clientUser: ClientUser = {
-        ...DEMO_USER,
-        email: credentials.email || DEMO_USER.email,
-      };
-      const generatedToken = "jwt-df-client-" + Date.now();
-      setToken(generatedToken);
-      setUser(clientUser);
-      localStorage.setItem(STORAGE_KEY, generatedToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(clientUser));
-      return true;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // El cliente HTTP avisa cuando el refresh token tampoco sirve.
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
 
-  const register = async (data: RegisterData): Promise<boolean> => {
-    setIsLoading(true);
-    try {
-      const newUser: ClientUser = {
-        id: "client-" + Math.floor(Math.random() * 9000 + 1000),
-        fullName: data.fullName,
-        email: data.email,
-        rut: data.rut,
-        phone: data.phone,
-        address: data.address,
-        role: "CLIENTE",
-      };
-      const generatedToken = "jwt-df-client-" + Date.now();
-      setToken(generatedToken);
-      setUser(newUser);
-      localStorage.setItem(STORAGE_KEY, generatedToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(newUser));
-      return true;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    const u = await authService.login(credentials);
+    setUser(u);
+    return u;
+  }, []);
 
-  const logout = () => {
-    setToken(null);
+  const register = useCallback(async (data: RegisterData) => {
+    const u = await authService.register(data);
+    setUser(u);
+    return u;
+  }, []);
+
+  const updateProfile = useCallback(async (changes: ProfileUpdate) => {
+    const u = await authService.updateProfile(changes);
+    setUser(u);
+    return u;
+  }, []);
+
+  const logout = useCallback(() => {
+    authService.logout();
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(USER_KEY);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated: !!token && !!user,
-        isLoading,
-        login,
-        register,
-        logout,
-      }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, register, updateProfile, logout }}
     >
       {children}
     </AuthContext.Provider>
@@ -117,8 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth debe ser utilizado dentro de un AuthProvider");
+    throw new Error("useAuth debe usarse dentro de un AuthProvider");
   }
   return context;
 };
-

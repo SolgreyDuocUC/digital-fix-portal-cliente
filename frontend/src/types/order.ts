@@ -4,7 +4,9 @@ export type OrderStatus =
   | "EN_DESPLAZAMIENTO"
   | "EN_EJECUCION"
   | "CERRADA"
-  | "CANCELADA";
+  | "CANCELADA"
+  // ms-workorders puede agregar estados; se muestran con su etiqueta.
+  | (string & {});
 
 export interface TrackingStep {
   status: OrderStatus;
@@ -17,6 +19,7 @@ export interface TrackingStep {
 
 export interface ClientOrderItem {
   productId: number;
+  kind?: "REPUESTO" | "SERVICIO";
   code: string;
   name: string;
   category: string;
@@ -25,7 +28,22 @@ export interface ClientOrderItem {
 }
 
 export interface ClientOrder {
-  id: string; // ej: "DF-1042"
+  /** Código del pedido en el portal (PED-...) o de la OT si la creó la central. */
+  id: string;
+  /** Código de seguimiento de la Orden de Trabajo en ms-workorders (OT-123). */
+  trackingCode?: string;
+  /** PORTAL: comprado en la tienda · ERP: OT creada por la central para este cliente. */
+  origin?: "PORTAL" | "ERP";
+  statusLabel?: string;
+  /** false si ms-workorders no respondió y el estado es el último conocido. */
+  liveTracking?: boolean;
+  crew?: string;
+  statusUpdatedAt?: string;
+  closedAt?: string;
+  preferredSchedule?: string;
+  subtotal?: number;
+  discount?: number;
+  couponCode?: string;
   numericId: number;
   createdAt: string;
   status: OrderStatus;

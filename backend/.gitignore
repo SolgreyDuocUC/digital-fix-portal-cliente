@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Portal Cliente ###
+# Secretos locales y base H2 de desarrollo
+.env
+data/

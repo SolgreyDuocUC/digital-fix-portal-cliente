@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../../../contexts/AuthContext";
+import { DEMO_ACCOUNTS, useAuth } from "../../../contexts/AuthContext";
+import { ApiError, errorMessage } from "../../../services/api";
 import { Brand } from "../../ui/Brand";
-import { Icon } from "../../ui/Icon";
 
 interface LoginPageProps {
   isOpen: boolean;
@@ -9,14 +9,10 @@ interface LoginPageProps {
   onSwitchToRegister: () => void;
 }
 
-const inputClass =
-  "w-full h-11 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+/** Las cuentas demo solo existen si el backend corre con PORTAL_DATOS_DEMO=true. */
+const MOSTRAR_CUENTAS_DEMO = import.meta.env.VITE_MOSTRAR_CUENTAS_DEMO !== "false";
 
-export const LoginPage: React.FC<LoginPageProps> = ({
-  isOpen,
-  onClose,
-  onSwitchToRegister,
-}) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ isOpen, onClose, onSwitchToRegister }) => {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +20,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Cerrar con Escape
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -52,8 +47,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     try {
       await login({ email, password });
       onClose();
-    } catch {
-      setError("No pudimos validar tus datos. Revisa tu correo y contraseña e inténtalo de nuevo.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 401
+          ? "El correo o la contraseña no coinciden."
+          : errorMessage(err, "No pudimos iniciar sesión. Inténtalo nuevamente.")
+      );
     } finally {
       setLoading(false);
     }
@@ -61,7 +60,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 animate-fadeIn overflow-y-auto"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -70,15 +69,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="login-title"
-        className="relative w-full max-w-[400px] bg-white rounded-lg shadow-xl p-8 animate-slideUp"
+        className="relative w-full max-w-[400px] bg-white rounded-xl shadow-xl p-8 my-8 animate-slideUp"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar"
-          className="absolute top-3 right-3 w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition"
-        >
-          <Icon name="close" size={16} />
+        <button type="button" onClick={onClose} aria-label="Cerrar" className="absolute top-3 right-3 btn-ghost">
+          Cerrar
         </button>
 
         <div className="flex justify-center mb-6">
@@ -88,22 +82,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <h2 id="login-title" className="text-xl font-semibold text-slate-900">
           Ingresa a tu cuenta
         </h2>
-        <p className="text-sm text-slate-500 mt-1 mb-6">
-          Usa el correo con el que registraste tu empresa.
-        </p>
+        <p className="text-sm text-slate-500 mt-1 mb-6">Clientes y equipo comercial ingresan por aquí.</p>
 
         {error && (
-          <div
-            role="alert"
-            className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700"
-          >
+          <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate={false}>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-email" className="block text-sm text-slate-700 mb-1.5">
+            <label htmlFor="login-email" className="label">
               Correo electrónico
             </label>
             <input
@@ -115,19 +104,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nombre@empresa.cl"
-              className={inputClass}
+              className="input h-11"
             />
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="login-password" className="text-sm text-slate-700">
+            <div className="flex items-center justify-between">
+              <label htmlFor="login-password" className="label">
                 Contraseña
               </label>
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="text-xs text-blue-600 hover:text-blue-700 transition"
+                className="text-xs font-medium text-brand-600 hover:text-brand-700 mb-1.5"
               >
                 {showPassword ? "Ocultar" : "Mostrar"}
               </button>
@@ -139,21 +128,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={inputClass}
+              className="input h-11"
             />
-            <button
-              type="button"
-              className="mt-2 text-xs text-blue-600 hover:text-blue-700 transition"
-            >
-              ¿Olvidaste tu contraseña?
-            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-11 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition"
-          >
+          <button type="submit" disabled={loading} className="btn-primary w-full h-11">
             {loading ? "Validando..." : "Ingresar"}
           </button>
         </form>
@@ -164,29 +143,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <span className="h-px flex-1 bg-slate-200" />
         </div>
 
-        <button
-          type="button"
-          onClick={onSwitchToRegister}
-          className="w-full h-11 rounded-md border border-slate-300 hover:border-blue-600 hover:text-blue-700 text-slate-700 text-sm font-semibold transition"
-        >
-          Crear cuenta de empresa
+        <button type="button" onClick={onSwitchToRegister} className="btn-secondary w-full h-11">
+          Crear cuenta de cliente
         </button>
 
-        <p className="text-[11px] text-slate-400 text-center mt-6">
-          Conexión segura · Tus datos están protegidos
-        </p>
-
-        {/* Acceso demo solo para pruebas: eliminar en producción */}
-        <button
-          type="button"
-          onClick={() => {
-            setEmail("contacto@comercialrojas.cl");
-            setPassword("demo1234");
-          }}
-          className="block mx-auto mt-2 text-[11px] text-slate-400 hover:text-blue-600 transition"
-        >
-          Usar cuenta de demostración
-        </button>
+        {MOSTRAR_CUENTAS_DEMO && (
+          <div className="mt-6 pt-5 border-t border-slate-200">
+            <p className="eyebrow mb-2">Cuentas de demostración</p>
+            <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {DEMO_ACCOUNTS.map((cuenta) => (
+                <li key={cuenta.email}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(cuenta.email);
+                      setPassword(cuenta.password);
+                      setError("");
+                    }}
+                    className="w-full px-3 py-2 flex items-center justify-between gap-3 text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="text-xs font-semibold text-slate-800">{cuenta.role}</span>
+                    <span className="text-[11px] text-slate-500 truncate">{cuenta.email}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-slate-400 mt-2">Elige una para completar el formulario y luego presiona Ingresar.</p>
+          </div>
+        )}
       </div>
     </div>
   );

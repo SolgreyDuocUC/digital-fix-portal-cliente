@@ -1,6 +1,6 @@
 import { ElectricalProduct } from "@/types/product";
 
-export const ELECTRICAL_CATALOG: ElectricalProduct[] = [
+const DATOS: Omit<ElectricalProduct, "kind">[] = [
   {
     id: 1,
     code: "SRV-EMG-01",
@@ -118,3 +118,9 @@ export const ELECTRICAL_CATALOG: ElectricalProduct[] = [
     iconType: "bolt",
   },
 ];
+
+/** Catálogo de ejemplo (sin uso en la tienda: los ítems reales vienen del backend). */
+export const ELECTRICAL_CATALOG: ElectricalProduct[] = DATOS.map((i) => ({
+  ...i,
+  kind: i.category === "Repuestos" ? "REPUESTO" : "SERVICIO",
+}));
