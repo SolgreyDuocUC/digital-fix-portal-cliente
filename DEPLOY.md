@@ -168,3 +168,4 @@ Usar **Nginx Proxy Manager** (otro stack de Portainer) o **Traefik** como revers
 |---|---|
 | Arquitectura & Backend | [@SolgreyDuocUC](https://github.com/SolgreyDuocUC) |
 | Frontend & UX | [@Blacknight3648](https://github.com/Blacknight3648) |
+
