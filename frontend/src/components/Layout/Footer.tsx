@@ -26,6 +26,10 @@ const BRANCHES = [
 
 const linkClass = "text-slate-500";
 
+/** Login del portal de trabajadores (app Angular del ERP). Se fija al compilar. */
+const URL_PORTAL_TRABAJADORES =
+  import.meta.env.VITE_URL_PORTAL_TRABAJADORES || "http://localhost:4200/login";
+
 export const Footer: React.FC = () => {
   return (
     <footer className="bg-white border-t border-slate-200 mt-16">
@@ -85,6 +89,13 @@ export const Footer: React.FC = () => {
             <span className={linkClass}>Términos de servicio</span>
             <span className={linkClass}>Políticas de privacidad</span>
             <span className={linkClass}>Protocolo SEC RIC N°02</span>
+            <a
+              href={URL_PORTAL_TRABAJADORES}
+              rel="noopener"
+              className="text-slate-400 hover:text-slate-700 hover:underline underline-offset-2"
+            >
+              Ingreso trabajadores
+            </a>
           </div>
         </div>
       </div>

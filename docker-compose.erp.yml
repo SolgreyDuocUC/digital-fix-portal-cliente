@@ -1,0 +1,22 @@
+# ==============================================================================
+# Complemento opcional: conecta el portal al ERP levantado con digitalfix-infrastructure
+# en el mismo Docker (red digitalfix-net, contenedores ms-catalog-service y ms-workorders-service).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.erp.yml up -d --build
+#
+# Requiere que digitalfix-infrastructure esté arriba (crea la red digitalfix-net).
+# ==============================================================================
+
+networks:
+  digitalfix-net:
+    name: digitalfix-net
+    external: true
+
+services:
+  portal-backend:
+    environment:
+      - MS_CATALOG_URL=http://ms-catalog-service:8080
+      - MS_WORKORDERS_URL=http://ms-workorders-service:8080
+    networks:
+      - portal-net
+      - digitalfix-net

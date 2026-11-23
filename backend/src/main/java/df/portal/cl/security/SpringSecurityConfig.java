@@ -53,6 +53,7 @@ public class SpringSecurityConfig {
                         /** SWAGGER Y PREFLIGHT CORS */
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
 
                         /** AUTH PÚBLICO */
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register",

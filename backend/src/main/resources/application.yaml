@@ -68,3 +68,13 @@ portal:
       api-key: ${MS_WORKORDERS_API_KEY:}
     timeout-conexion-ms: ${MS_TIMEOUT_CONEXION_MS:3000}
     timeout-lectura-ms: ${MS_TIMEOUT_LECTURA_MS:10000}
+
+# Solo /actuator/health (healthcheck de Docker); sin detalles para no exponer la topología.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

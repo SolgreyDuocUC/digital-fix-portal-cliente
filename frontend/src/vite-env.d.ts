@@ -5,4 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   /** "false" oculta las cuentas de demostración en el login. */
   readonly VITE_MOSTRAR_CUENTAS_DEMO?: string;
+  /** Login del portal de trabajadores (digitalfix-frontend); se enlaza desde el pie de página. */
+  readonly VITE_URL_PORTAL_TRABAJADORES?: string;
 }

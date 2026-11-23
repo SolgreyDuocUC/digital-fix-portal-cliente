@@ -54,6 +54,20 @@ public class OrderServiceImpl implements OrderService {
     static final String ORIGEN_ERP = "ERP";
     private static final String ALFABETO_CODIGO = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** ms-workorders guarda sus fechas sin zona, en hora de Chile. */
+    private static final ZoneId ZONA_ERP = ZoneId.of("America/Santiago");
+
+    /**
+     * Flujo de hitos que ve el cliente, igual al de ms-workorders (PortalExternoServiceImpl.HITOS).
+     * Solo se usa como respaldo, para dibujar el avance con el último estado conocido cuando la
+     * central no responde.
+     */
+    private static final List<HitoDTO> FLUJO_HITOS = List.of(
+            new HitoDTO("CREADA", "Orden creada", "Solicitud recibida por la central", false, false),
+            new HitoDTO("ASIGNADA", "Cuadrilla asignada", "Un equipo técnico tomó tu orden", false, false),
+            new HitoDTO("EN_DESPLAZAMIENTO", "En camino", "El equipo va hacia tu dirección", false, false),
+            new HitoDTO("EN_EJECUCION", "En terreno", "Trabajo en ejecución", false, false),
+            new HitoDTO("CERRADA", "Finalizada", "Trabajo terminado y certificado", false, false));
 
     private final UserService userService;
     private final ProductService productService;
@@ -345,9 +359,9 @@ public class OrderServiceImpl implements OrderService {
                 "OT-" + pedido.getIdOrdenTrabajo(),
                 pedido.getFechaCreacion(),
                 estado,
-                ot != null ? ot.estadoEtiqueta() : null,
+                ot != null ? ot.estadoEtiqueta() : etiquetaDeEstado(estado),
                 enVivo,
-                hitos(ot),
+                ot != null ? hitos(ot) : hitosSegunEstado(estado),
                 ot != null ? ot.cuadrilla() : null,
                 ot != null ? ot.fechaActualizacionEstado() : null,
                 ot != null ? ot.fechaCierre() : null,
@@ -373,7 +387,7 @@ public class OrderServiceImpl implements OrderService {
                 ORIGEN_ERP,
                 ot.idOrdenTrabajo(),
                 ot.codigoSeguimiento(),
-                ot.fechaIngreso() != null ? ot.fechaIngreso().atZone(ZoneId.systemDefault()).toOffsetDateTime() : null,
+                ot.fechaIngreso() != null ? ot.fechaIngreso().atZone(ZONA_ERP).toOffsetDateTime() : null,
                 ot.estado(),
                 ot.estadoEtiqueta(),
                 true,
@@ -396,6 +410,39 @@ public class OrderServiceImpl implements OrderService {
         return ot.hitos().stream()
                 .map(h -> new HitoDTO(h.estado(), h.etiqueta(), h.descripcion(), h.completado(), h.actual()))
                 .toList();
+    }
+
+    /** Avance armado con el último estado conocido (mismo criterio que ms-workorders). */
+    static List<HitoDTO> hitosSegunEstado(String estado) {
+        if (estado == null) {
+            return List.of();
+        }
+        if ("CANCELADA".equals(estado)) {
+            return List.of(
+                    new HitoDTO("CREADA", "Orden creada", "Solicitud recibida por la central", true, false),
+                    new HitoDTO("CANCELADA", "Cancelada", "La orden fue cancelada", true, true));
+        }
+        int actual = 0;
+        for (int i = 0; i < FLUJO_HITOS.size(); i++) {
+            if (FLUJO_HITOS.get(i).estado().equals(estado)) {
+                actual = i;
+            }
+        }
+        boolean cerrada = "CERRADA".equals(estado);
+        List<HitoDTO> hitos = new ArrayList<>();
+        for (int i = 0; i < FLUJO_HITOS.size(); i++) {
+            HitoDTO h = FLUJO_HITOS.get(i);
+            hitos.add(new HitoDTO(h.estado(), h.etiqueta(), h.descripcion(), i < actual || cerrada, i == actual));
+        }
+        return hitos;
+    }
+
+    private static String etiquetaDeEstado(String estado) {
+        if ("CANCELADA".equals(estado)) {
+            return "Cancelada";
+        }
+        return FLUJO_HITOS.stream().filter(h -> h.estado().equals(estado))
+                .map(HitoDTO::etiqueta).findFirst().orElse(null);
     }
 
     private static boolean tieneTexto(String s) {

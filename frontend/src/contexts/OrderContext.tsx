@@ -1,18 +1,23 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ClientOrder } from "@/types/order";
 import { fetchMyOrders } from "@/services/orderService";
 import { errorMessage } from "@/services/api";
 import { useAuth } from "./AuthContext";
 
+/** Cada cuánto se vuelve a consultar el estado en vivo mientras la pestaña está visible. */
+const INTERVALO_SEGUIMIENTO_MS = 60_000;
+
 interface OrderContextType {
   orders: ClientOrder[];
   loading: boolean;
   error: string | null;
+  /** Momento de la última consulta exitosa a la central. */
+  lastUpdated: Date | null;
   /** Vuelve a consultar el estado en vivo de los pedidos. */
   refresh: () => void;
   selectedOrderId: string | null;
   setSelectedOrderId: (id: string | null) => void;
-  /** Agrega un pedido recién creado sin esperar a la siguiente consulta. */
+  /** Agrega (o reemplaza) un pedido sin esperar a la siguiente consulta. */
   addOrder: (order: ClientOrder) => void;
 }
 
@@ -24,8 +29,10 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const enCurso = useRef<AbortController | null>(null);
 
   const esCliente = user?.role === "CLIENTE";
   const clientName = user?.fullName ?? "";
@@ -35,13 +42,19 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!esCliente) {
       setOrders([]);
       setError(null);
+      setLastUpdated(null);
       return;
     }
+    enCurso.current?.abort();
     const ctrl = new AbortController();
+    enCurso.current = ctrl;
     setLoading(true);
     setError(null);
     fetchMyOrders({ name: clientName, rut: clientRut }, ctrl.signal)
-      .then(setOrders)
+      .then((lista) => {
+        setOrders(lista);
+        setLastUpdated(new Date());
+      })
       .catch((err) => {
         if ((err as Error)?.name !== "AbortError") setError(errorMessage(err));
       })
@@ -53,6 +66,23 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
+  // Seguimiento en vivo: consulta periódica solo con la pestaña visible, y una consulta inmediata
+  // al volver a ella (así el cliente ve el avance sin tocar "Actualizar").
+  useEffect(() => {
+    if (!esCliente) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, INTERVALO_SEGUIMIENTO_MS);
+    const alVolver = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", alVolver);
+    };
+  }, [esCliente, refresh]);
+
   const addOrder = useCallback((order: ClientOrder) => {
     setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
     setSelectedOrderId(order.id);
@@ -60,7 +90,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <OrderContext.Provider
-      value={{ orders, loading, error, refresh, selectedOrderId, setSelectedOrderId, addOrder }}
+      value={{ orders, loading, error, lastUpdated, refresh, selectedOrderId, setSelectedOrderId, addOrder }}
     >
       {children}
     </OrderContext.Provider>

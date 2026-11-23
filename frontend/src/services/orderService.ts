@@ -4,7 +4,8 @@ import { api } from "./api";
 
 /** PedidoResponseDTO del backend. */
 interface PedidoResponseDTO {
-  codigo: string;
+  /** null en las OT que creó la central (no pasaron por la tienda). */
+  codigo: string | null;
   origen: "PORTAL" | "ERP";
   idOrdenTrabajo: number | null;
   codigoSeguimiento: string | null;
@@ -71,7 +72,8 @@ const toOrder = (p: PedidoResponseDTO, clientName: string, clientRut: string): C
         : `${first.name} y ${items.length - 1} ítem(s) más`;
 
   return {
-    id: p.codigo,
+    // Las OT de la central no tienen código de pedido: se identifican por su código de OT.
+    id: p.codigo ?? p.codigoSeguimiento ?? `OT-${p.idOrdenTrabajo ?? 0}`,
     numericId: p.idOrdenTrabajo ?? 0,
     trackingCode: p.codigoSeguimiento ?? undefined,
     origin: p.origen,
@@ -139,6 +141,16 @@ export async function createOrder(
 export async function fetchMyOrders(client: { name: string; rut: string }, signal?: AbortSignal): Promise<ClientOrder[]> {
   const list = await api<PedidoResponseDTO[]>("/orders/my-orders", { signal });
   return list.map((p) => toOrder(p, client.name, client.rut));
+}
+
+/** Seguimiento de un pedido (PED-XXXXXX) u orden de trabajo (OT-123) del cliente. */
+export async function fetchOrderByCode(
+  code: string,
+  client: { name: string; rut: string },
+  signal?: AbortSignal
+): Promise<ClientOrder> {
+  const dto = await api<PedidoResponseDTO>(`/orders/${encodeURIComponent(code.trim().toUpperCase())}`, { signal });
+  return toOrder(dto, client.name, client.rut);
 }
 
 // ---- Cupones ----

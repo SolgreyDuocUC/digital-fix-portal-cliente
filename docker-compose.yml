@@ -1,28 +1,33 @@
 # ==============================================================================
 # DIGITALFIX - PORTAL CLIENTE (monolito: frontend React + backend Spring Boot)
 # ==============================================================================
+# Este stack es independiente: trae su propia base de datos y no necesita que la red ni
+# los contenedores del ERP existan para arrancar. Los microservicios (ms-catalog y
+# ms-workorders) se consumen por HTTP en las URLs MS_CATALOG_URL y MS_WORKORDERS_URL.
+#
 # Uso:
-#   1. cp .env.example .env   (y completar PORTAL_DB_PASSWORD, PORTAL_JWT_SECRET, PORTAL_API_KEY)
-#   2. Levantar antes digitalfix-infrastructure (crea la red digitalfix-net con ms-catalog y
-#      ms-workorders). Para probar el portal sin el ERP: docker network create digitalfix-net
-#   3. docker compose up -d --build
-#   4. Portal: http://localhost:${PORTAL_FRONTEND_PORT:-3000}
+#   1. cp .env.example .env   (completar PORTAL_DB_PASSWORD, PORTAL_JWT_SECRET, PORTAL_API_KEY)
+#   2. Elegir cómo llegar al ERP:
+#      a) Portal solo (ERP en otro servidor o corriendo en tu IDE):
+#           docker compose up -d --build
+#         Por defecto llama a host.docker.internal:8088 (catalog) y :8085 (workorders), es
+#         decir, a los microservicios levantados en tu propio equipo. Cámbialo en .env.
+#      b) ERP levantado con digitalfix-infrastructure en este mismo Docker:
+#           docker compose -f docker-compose.yml -f docker-compose.erp.yml up -d --build
+#   3. Portal: http://localhost:${PORTAL_FRONTEND_PORT:-3000}
 #      Swagger del backend: http://localhost:${PORTAL_BACKEND_PORT:-8091}/swagger-ui.html
 #
 # El navegador solo habla con el contenedor del frontend (nginx), que reenvía /api/v1 al backend.
-# El backend consume ms-catalog y ms-workorders por la red interna digitalfix-net.
+# Si el ERP no responde, el login, la cuenta y las reseñas siguen funcionando; la tienda y
+# "Mis órdenes" muestran un aviso de servicio no disponible.
 # ==============================================================================
 
 name: digitalfix-portal-cliente
 
 networks:
-  # Red propia: solo backend ↔ base de datos.
+  # Red propia del portal: frontend ↔ backend ↔ base de datos.
   portal-net:
     name: digitalfix-portal-net
-  # Red del ERP (la crea digitalfix-infrastructure): ms-catalog-service y ms-workorders-service.
-  digitalfix-net:
-    name: digitalfix-net
-    external: true
 
 volumes:
   portal-db-data:
@@ -68,6 +73,10 @@ services:
     # Publicado solo en localhost para Swagger y pruebas; el tráfico normal entra por el frontend.
     ports:
       - "127.0.0.1:${PORTAL_BACKEND_PORT:-8091}:8090"
+    # Permite llegar a servicios del propio equipo (p. ej. microservicios corriendo en el IDE)
+    # también en Linux, donde host.docker.internal no existe por defecto.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - SERVER_PORT=8090
       - SPRING_DATASOURCE_URL=jdbc:postgresql://portal-db:5432/portal_db
@@ -80,16 +89,23 @@ services:
       - PORTAL_JWT_EXPIRACION_REFRESH_DIAS=${PORTAL_JWT_EXPIRACION_REFRESH_DIAS:-7}
       - PORTAL_DATOS_DEMO=${PORTAL_DATOS_DEMO:-false}
       - PORTAL_MINUTOS_RESERVA_STOCK=${PORTAL_MINUTOS_RESERVA_STOCK:-30}
-      # Nombres de contenedor del ERP en digitalfix-net (ver digitalfix-infrastructure).
-      - MS_CATALOG_URL=${MS_CATALOG_URL:-http://ms-catalog-service:8080}
-      - MS_WORKORDERS_URL=${MS_WORKORDERS_URL:-http://ms-workorders-service:8080}
+      # Microservicios del ERP. docker-compose.erp.yml los cambia por los nombres de contenedor.
+      - MS_CATALOG_URL=${MS_CATALOG_URL:-http://host.docker.internal:8088}
+      - MS_WORKORDERS_URL=${MS_WORKORDERS_URL:-http://host.docker.internal:8085}
       # Debe ser igual a PORTAL_API_KEY de ms-workorders.
       - MS_WORKORDERS_API_KEY=${PORTAL_API_KEY:-}
+      - MS_TIMEOUT_CONEXION_MS=${MS_TIMEOUT_CONEXION_MS:-3000}
+      - MS_TIMEOUT_LECTURA_MS=${MS_TIMEOUT_LECTURA_MS:-10000}
       - JAVA_OPTS=${JAVA_OPTS:--Djava.net.preferIPv4Stack=true}
       - JDK_JAVA_OPTIONS=${JVM_MEMORY_OPTS:--XX:MaxRAMPercentage=60 -XX:+UseSerialGC -Xss512k}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     networks:
       - portal-net
-      - digitalfix-net
     depends_on:
       portal-db:
         condition: service_healthy
@@ -102,6 +118,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Enlace "Ingreso trabajadores" del pie de página (login de digitalfix-frontend).
+        - VITE_URL_PORTAL_TRABAJADORES=${PORTAL_URL_TRABAJADORES:-http://localhost:4200/login}
+        - VITE_MOSTRAR_CUENTAS_DEMO=${PORTAL_DATOS_DEMO:-false}
     image: digitalfix/portal-cliente-frontend:latest
     container_name: portal-frontend
     mem_limit: ${PORTAL_FRONTEND_MEMORY:-64m}
@@ -112,5 +132,6 @@ services:
     networks:
       - portal-net
     depends_on:
-      - portal-backend
+      portal-backend:
+        condition: service_healthy
     restart: unless-stopped

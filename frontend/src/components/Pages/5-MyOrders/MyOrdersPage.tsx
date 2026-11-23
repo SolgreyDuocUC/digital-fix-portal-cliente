@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useOrders } from "../../../contexts/OrderContext";
 import { ClientOrder } from "../../../types/order";
 import { formatPrice } from "../../../utils/currency";
 import { formatDate } from "../../../utils/dateUtils";
 import { Stepper } from "../../ui/Stepper";
+import { fetchOrderByCode } from "../../../services/orderService";
+import { errorMessage } from "../../../services/api";
+
+const FORMATO_CODIGO = /^(PED-[A-Z0-9]{6}|OT-\d+)$/;
 
 interface MyOrdersPageProps {
   onLogin?: () => void;
@@ -24,12 +28,45 @@ const etiquetaEstado = (o: ClientOrder) =>
 
 export const MyOrdersPage: React.FC<MyOrdersPageProps> = ({ onLogin, onGoToCatalog }) => {
   const { user, isAuthenticated } = useAuth();
-  const { orders, loading, error, refresh, selectedOrderId } = useOrders();
+  const { orders, loading, error, lastUpdated, refresh, selectedOrderId, setSelectedOrderId, addOrder } = useOrders();
   const [expandedId, setExpandedId] = useState<string | null>(selectedOrderId);
+  const [codigoBuscado, setCodigoBuscado] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedOrderId) setExpandedId(selectedOrderId);
-  }, [selectedOrderId]);
+    if (!selectedOrderId) return;
+    setExpandedId(selectedOrderId);
+    // Lleva la vista a la orden elegida (recién comprada o buscada por código).
+    requestAnimationFrame(() =>
+      document.getElementById(`orden-${selectedOrderId}`)?.scrollIntoView({ behavior: "smooth", block: "start" })
+    );
+  }, [selectedOrderId, orders]);
+
+  /** Busca un pedido (PED-XXXXXX) u OT (OT-123): primero en la lista, si no, en la central. */
+  const seguirOrden = async (e: FormEvent) => {
+    e.preventDefault();
+    const codigo = codigoBuscado.trim().toUpperCase();
+    setErrorBusqueda(null);
+    if (!FORMATO_CODIGO.test(codigo)) {
+      setErrorBusqueda("Ingresa un código como PED-A1B2C3 o OT-125.");
+      return;
+    }
+    const enLista = orders.find((o) => o.id === codigo || o.trackingCode === codigo);
+    if (enLista) {
+      setSelectedOrderId(enLista.id);
+      return;
+    }
+    setBuscando(true);
+    try {
+      const orden = await fetchOrderByCode(codigo, { name: user?.fullName ?? "", rut: user?.rut ?? "" });
+      addOrder(orden);
+    } catch (err) {
+      setErrorBusqueda(errorMessage(err));
+    } finally {
+      setBuscando(false);
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -54,10 +91,45 @@ export const MyOrdersPage: React.FC<MyOrdersPageProps> = ({ onLogin, onGoToCatal
             Pedidos hechos en el portal y atenciones que la central registró a nombre de {user?.fullName}.
           </p>
         </div>
-        <button onClick={refresh} disabled={loading} className="btn-secondary">
-          {loading ? "Actualizando..." : "Actualizar estado"}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={refresh} disabled={loading} className="btn-secondary">
+            {loading ? "Actualizando..." : "Actualizar estado"}
+          </button>
+          {lastUpdated && (
+            <p className="text-[11px] text-slate-500" aria-live="polite">
+              Actualizado a las{" "}
+              {lastUpdated.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} · se
+              actualiza solo cada minuto
+            </p>
+          )}
+        </div>
       </div>
+
+      <form onSubmit={seguirOrden} className="panel p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+        <label className="flex-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-900">Seguir una orden</span>
+          <span className="block text-slate-500 mt-0.5">
+            Código de tu pedido (PED-…) o de la orden de trabajo que te dio la central (OT-…).
+          </span>
+          <input
+            value={codigoBuscado}
+            onChange={(e) => setCodigoBuscado(e.target.value)}
+            placeholder="PED-A1B2C3 u OT-125"
+            className="input mt-2 w-full uppercase"
+            autoComplete="off"
+            aria-invalid={!!errorBusqueda}
+            aria-describedby={errorBusqueda ? "error-busqueda" : undefined}
+          />
+        </label>
+        <button type="submit" disabled={buscando || !codigoBuscado.trim()} className="btn-primary">
+          {buscando ? "Buscando..." : "Ver seguimiento"}
+        </button>
+      </form>
+      {errorBusqueda && (
+        <p id="error-busqueda" role="alert" className="-mt-3 text-xs text-red-700">
+          {errorBusqueda}
+        </p>
+      )}
 
       {error && (
         <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -85,11 +157,17 @@ export const MyOrdersPage: React.FC<MyOrdersPageProps> = ({ onLogin, onGoToCatal
         {orders.map((order) => {
           const isExpanded = expandedId === order.id;
           return (
-            <article key={order.id} className="panel overflow-hidden">
+            <article
+              key={order.id}
+              id={`orden-${order.id}`}
+              className={`panel overflow-hidden scroll-mt-24 ${
+                selectedOrderId === order.id ? "ring-2 ring-brand-200" : ""
+              }`}
+            >
               <header className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
                 <dl className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs">
                   <div>
-                    <dt className="eyebrow">Pedido</dt>
+                    <dt className="eyebrow">{order.origin === "ERP" ? "Orden de trabajo" : "Pedido"}</dt>
                     <dd className="font-semibold text-slate-900">{order.id}</dd>
                   </div>
                   {order.trackingCode && order.trackingCode !== order.id && (
@@ -134,8 +212,22 @@ export const MyOrdersPage: React.FC<MyOrdersPageProps> = ({ onLogin, onGoToCatal
                   </div>
                 )}
 
-                {(order.crew || order.preferredSchedule) && (
+                {(order.crew || order.preferredSchedule || order.statusUpdatedAt || order.closedAt) && (
                   <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {order.statusUpdatedAt && !order.closedAt && (
+                      <div className="rounded-lg bg-slate-50 px-3 py-2">
+                        <dt className="text-slate-500">Último cambio de estado</dt>
+                        <dd className="font-medium text-slate-900 mt-0.5">{formatDate(order.statusUpdatedAt)}</dd>
+                      </div>
+                    )}
+                    {order.closedAt && (
+                      <div className="rounded-lg bg-slate-50 px-3 py-2">
+                        <dt className="text-slate-500">
+                          {order.status === "CANCELADA" ? "Cancelada el" : "Finalizada el"}
+                        </dt>
+                        <dd className="font-medium text-slate-900 mt-0.5">{formatDate(order.closedAt)}</dd>
+                      </div>
+                    )}
                     {order.crew && (
                       <div className="rounded-lg bg-slate-50 px-3 py-2">
                         <dt className="text-slate-500">Cuadrilla asignada</dt>

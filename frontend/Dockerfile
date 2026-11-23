@@ -11,6 +11,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+# Variables de Vite: se incrustan en el JS al compilar (no se pueden cambiar al arrancar).
+ARG VITE_URL_PORTAL_TRABAJADORES=http://localhost:4200/login
+ARG VITE_MOSTRAR_CUENTAS_DEMO=true
+ENV VITE_URL_PORTAL_TRABAJADORES=$VITE_URL_PORTAL_TRABAJADORES     VITE_MOSTRAR_CUENTAS_DEMO=$VITE_MOSTRAR_CUENTAS_DEMO
 RUN npm run build
 
 # ==========================================
