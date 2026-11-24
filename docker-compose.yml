@@ -99,7 +99,7 @@ services:
       - JAVA_OPTS=${JAVA_OPTS:--Djava.net.preferIPv4Stack=true}
       - JDK_JAVA_OPTIONS=${JVM_MEMORY_OPTS:--XX:MaxRAMPercentage=60 -XX:+UseSerialGC -Xss512k}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/actuator/health | grep -q UP"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/actuator/health | grep -q UP"]
       interval: 10s
       timeout: 5s
       retries: 12
