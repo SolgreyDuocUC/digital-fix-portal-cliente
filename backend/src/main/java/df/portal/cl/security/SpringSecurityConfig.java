@@ -68,14 +68,10 @@ public class SpringSecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/register",
                                 "/api/v1/auth/refresh").permitAll()
 
-                        /** CATÁLOGO Y UBICACIONES – públicos (la tienda se navega sin sesión) */
-                        .requestMatchers(HttpMethod.GET, "/api/v1/products/tienda", "/api/v1/products/tienda/**")
-                                .hasRole("MARKETING")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
+                        /** UBICACIONES – públicas (el checkout requiere seleccionar comuna) */
                         .requestMatchers(HttpMethod.GET, "/api/v1/ubicaciones/**").permitAll()
 
-                        /** MARKETING – capa comercial de la tienda y cupones */
-                        .requestMatchers("/api/v1/products/tienda/**").hasRole("MARKETING")
+                        /** MARKETING – cupones */
                         .requestMatchers(HttpMethod.GET, "/api/v1/promo-codes/*").authenticated()
                         .requestMatchers("/api/v1/promo-codes", "/api/v1/promo-codes/**").hasRole("MARKETING")
 

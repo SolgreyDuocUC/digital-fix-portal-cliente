@@ -1,51 +1,54 @@
+/**
+ * Catálogo de la tienda.
+ *
+ * El frontend consulta directamente a ms-catalog (repuestos y servicios) sin pasar por
+ * el backend del portal. El proxy de Vite reenvía /ms-catalog → http://localhost:8088
+ * en desarrollo; en producción se usa VITE_MS_CATALOG_URL.
+ */
 import { ElectricalProduct, ItemKind } from "@/types/product";
-import { api } from "./api";
+import { msRepuestos, msServicios, RepuestoCatalogo, ServicioCatalogo } from "./msApi";
 
-/** ProductoPublicoDTO del backend: repuesto (ms-catalog) o servicio (ms-workorders) con la capa de Marketing. */
-export interface ProductoPublicoDTO {
-  id: number;
-  tipo: ItemKind;
-  codigo: string;
-  nombre: string;
-  descripcion: string | null;
-  categoria: string | null;
-  precio: number;
-  precioLista: number | null;
-  descuentoPorcentaje: number | null;
-  stock: number | null;
-  disponible: boolean;
-  unidadMedida: string | null;
-  certificacionSEC: boolean;
-  marca: string | null;
-  imagenUrl: string | null;
-  badge: string | null;
-  destacado: boolean;
-}
+// ── Adaptadores ──────────────────────────────────────────────────────────────
 
-export const toProduct = (p: ProductoPublicoDTO): ElectricalProduct => {
-  const isPart = p.tipo === "REPUESTO";
-  const precio = Number(p.precio);
-  const lista = p.precioLista != null ? Number(p.precioLista) : undefined;
-  return {
-    id: p.id,
-    kind: p.tipo,
-    code: p.codigo,
-    name: p.nombre,
-    // Los repuestos se agrupan en una sola sección de tienda.
-    category: isPart ? "Repuestos" : p.categoria?.trim() || "Servicios generales",
-    description: p.descripcion?.trim() || (isPart ? "Repuesto eléctrico del catálogo DigitalFix." : "Servicio técnico en terreno."),
-    price: precio,
-    originalPrice: lista !== undefined && lista > precio ? lista : undefined,
-    highlightBadge: p.badge ?? undefined,
-    featured: p.destacado,
-    brand: p.marca ?? undefined,
-    unit: p.unidadMedida ?? undefined,
-    secCertified: p.certificacionSEC,
-    stock: isPart ? (p.stock ?? 0) : undefined,
-    available: p.disponible,
-    imageUrl: p.imagenUrl ?? undefined,
-  };
-};
+const repuestoToProduct = (r: RepuestoCatalogo): ElectricalProduct => ({
+  id: r.id,
+  kind: "REPUESTO" as ItemKind,
+  code: r.codigo,
+  name: r.nombre,
+  category: "Repuestos",
+  description: r.descripcion?.trim() || "Repuesto eléctrico del catálogo DigitalFix.",
+  price: Number(r.precio),
+  originalPrice: undefined,
+  highlightBadge: undefined,
+  featured: false,
+  brand: r.marca ?? undefined,
+  unit: r.unidadMedida ?? undefined,
+  secCertified: false,
+  stock: r.stockDisponible ?? 0,
+  available: r.activo && (r.stockDisponible ?? 0) > 0,
+  imageUrl: undefined,
+});
+
+const servicioToProduct = (s: ServicioCatalogo): ElectricalProduct => ({
+  id: s.id,
+  kind: "SERVICIO" as ItemKind,
+  code: s.codigo,
+  name: s.nombre,
+  category: s.categoria?.trim() || "Servicios generales",
+  description: s.descripcion?.trim() || "Servicio técnico en terreno.",
+  price: Number(s.tarifa),
+  originalPrice: undefined,
+  highlightBadge: undefined,
+  featured: false,
+  brand: undefined,
+  unit: undefined,
+  secCertified: false,
+  stock: undefined,
+  available: s.estado === "ACTIVO" && (s.stock ?? 0) > 0,
+  imageUrl: undefined,
+});
+
+// ── API pública ──────────────────────────────────────────────────────────────
 
 export interface CatalogResult {
   items: ElectricalProduct[];
@@ -54,19 +57,29 @@ export interface CatalogResult {
 }
 
 /**
- * Repuestos y servicios a la venta. Cada lista se pide por separado: si un microservicio no
- * responde, la otra sección igual se muestra.
+ * Repuestos y servicios a la venta directo desde ms-catalog.
+ * Cada petición va por separado: si un endpoint falla, el otro igual se muestra.
  */
 export async function fetchCatalog(signal?: AbortSignal): Promise<CatalogResult> {
-  const [repuestos, servicios] = await Promise.allSettled([
-    api<ProductoPublicoDTO[]>("/products", { auth: false, signal }),
-    api<ProductoPublicoDTO[]>("/products/services", { auth: false, signal }),
+  const [repuestosRes, serviciosRes] = await Promise.allSettled([
+    msRepuestos.listar(signal),
+    msServicios.listar(signal),
   ]);
+
   const items: ElectricalProduct[] = [];
   const errors: string[] = [];
-  if (servicios.status === "fulfilled") items.push(...servicios.value.map(toProduct));
-  else errors.push("servicios");
-  if (repuestos.status === "fulfilled") items.push(...repuestos.value.map(toProduct));
-  else errors.push("repuestos");
+
+  if (serviciosRes.status === "fulfilled") {
+    items.push(...serviciosRes.value.map(servicioToProduct));
+  } else {
+    errors.push("servicios");
+  }
+
+  if (repuestosRes.status === "fulfilled") {
+    items.push(...repuestosRes.value.map(repuestoToProduct));
+  } else {
+    errors.push("repuestos");
+  }
+
   return { items, errors };
 }

@@ -40,9 +40,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Orquestación del checkout. No es una transacción distribuida: si falla un paso, se compensa el
- * anterior (se libera la reserva de stock en ms-catalog) y el cliente recibe el error del servicio
- * que falló. Las llamadas remotas quedan fuera de la transacción local, que solo envuelve el guardado
+ * Orquestación del checkout. No es una transacción distribuida: si falla un
+ * paso, se compensa el
+ * anterior (se libera la reserva de stock en ms-catalog) y el cliente recibe el
+ * error del servicio
+ * que falló. Las llamadas remotas quedan fuera de la transacción local, que
+ * solo envuelve el guardado
  * del pedido y el uso del cupón.
  */
 @Slf4j
@@ -58,8 +61,10 @@ public class OrderServiceImpl implements OrderService {
     private static final ZoneId ZONA_ERP = ZoneId.of("America/Santiago");
 
     /**
-     * Flujo de hitos que ve el cliente, igual al de ms-workorders (PortalExternoServiceImpl.HITOS).
-     * Solo se usa como respaldo, para dibujar el avance con el último estado conocido cuando la
+     * Flujo de hitos que ve el cliente, igual al de ms-workorders
+     * (PortalExternoServiceImpl.HITOS).
+     * Solo se usa como respaldo, para dibujar el avance con el último estado
+     * conocido cuando la
      * central no responde.
      */
     private static final List<HitoDTO> FLUJO_HITOS = List.of(
@@ -94,7 +99,8 @@ public class OrderServiceImpl implements OrderService {
             throw NegocioException.invalido("Indica la comuna de la dirección de atención");
         }
 
-        // 1. Precios vigentes del ERP con el descuento de tienda (nunca los del navegador).
+        // 1. Precios vigentes del ERP con el descuento de tienda (nunca los del
+        // navegador).
         List<Linea> lineas = lineas(dto.items());
         BigDecimal subtotal = lineas.stream().map(Linea::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -108,7 +114,8 @@ public class OrderServiceImpl implements OrderService {
         List<Linea> repuestos = lineas.stream().filter(l -> l.tipo() == TipoItemTienda.REPUESTO).toList();
         String tokenReserva = repuestos.isEmpty() ? null : reservarStock(codigo, repuestos);
 
-        // 4. Orden de Trabajo en ms-workorders: desde aquí la ve y opera el portal de empleados.
+        // 4. Orden de Trabajo en ms-workorders: desde aquí la ve y opera el portal de
+        // empleados.
         SeguimientoOrden ot;
         try {
             ot = ordenesTrabajoClient.crearOrden(ordenParaErp(codigo, usuario, idComuna, dto, lineas, tokenReserva));
@@ -118,7 +125,8 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // 5. Pedido local (detalle comercial) y uso del cupón, en una transacción.
-        Pedido pedido = construirPedido(codigo, usuario, idComuna, dto, lineas, subtotal, descuento, cupon, tokenReserva, ot);
+        Pedido pedido = construirPedido(codigo, usuario, idComuna, dto, lineas, subtotal, descuento, cupon,
+                tokenReserva, ot);
         try {
             transactionTemplate.executeWithoutResult(status -> {
                 pedidoRepository.save(pedido);
@@ -158,7 +166,8 @@ public class OrderServiceImpl implements OrderService {
                         + "\" se agenda una vez por pedido (cantidad 1)");
             }
             if (item.tipo() == TipoItemTienda.REPUESTO && !producto.tieneStockDisponible()) {
-                throw NegocioException.conflicto("\"" + producto.getNombreParaMostrar() + "\" no tiene stock disponible");
+                throw NegocioException
+                        .conflicto("\"" + producto.getNombreParaMostrar() + "\" no tiene stock disponible");
             }
             lineas.add(new Linea(item.tipo(), item.id(), producto.getCodigo(), producto.getNombreParaMostrar(),
                     cantidad, producto.getPrecioFinal()));
@@ -176,13 +185,14 @@ public class OrderServiceImpl implements OrderService {
                     .filter(d -> !d.disponible())
                     .map(d -> d.nombre() + ": pediste " + d.cantidadSolicitada() + ", hay " + d.stockDisponibleReal())
                     .toList();
-            throw new NegocioException(HttpStatus.CONFLICT, "No hay stock suficiente para uno o más repuestos", faltantes);
+            throw new NegocioException(HttpStatus.CONFLICT, "No hay stock suficiente para uno o más repuestos",
+                    faltantes);
         }
         return hold.tokenReserva();
     }
 
     private static OrdenPortalRequest ordenParaErp(String codigo, Usuario usuario, Long idComuna, PedidoCreateDTO dto,
-                                                   List<Linea> lineas, String tokenReserva) {
+            List<Linea> lineas, String tokenReserva) {
         PedidoCreateDTO.DireccionDTO d = dto.direccion();
         return new OrdenPortalRequest(
                 codigo,
@@ -191,7 +201,8 @@ public class OrderServiceImpl implements OrderService {
                 new DireccionRemota(idComuna, d.calle(), d.numero(), d.detalle(), d.referencia(), d.codigoPostal()),
                 lineas.stream().filter(l -> l.tipo() == TipoItemTienda.SERVICIO).map(Linea::id).toList(),
                 lineas.stream().filter(l -> l.tipo() == TipoItemTienda.REPUESTO)
-                        .map(l -> new OrdenPortalRequest.RepuestoSolicitado(l.id(), l.codigo(), l.nombre(), l.cantidad()))
+                        .map(l -> new OrdenPortalRequest.RepuestoSolicitado(l.id(), l.codigo(), l.nombre(),
+                                l.cantidad()))
                         .toList(),
                 dto.horarioPreferido(),
                 dto.notas(),
@@ -199,8 +210,8 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private static Pedido construirPedido(String codigo, Usuario usuario, Long idComuna, PedidoCreateDTO dto,
-                                          List<Linea> lineas, BigDecimal subtotal, BigDecimal descuento, Cupon cupon,
-                                          String tokenReserva, SeguimientoOrden ot) {
+            List<Linea> lineas, BigDecimal subtotal, BigDecimal descuento, Cupon cupon,
+            String tokenReserva, SeguimientoOrden ot) {
         PedidoCreateDTO.DireccionDTO d = dto.direccion();
         Pedido pedido = Pedido.builder()
                 .codigo(codigo)
@@ -257,7 +268,8 @@ public class OrderServiceImpl implements OrderService {
         try {
             otsDelErp = usuario.getRut() == null ? Map.of()
                     : ordenesTrabajoClient.ordenesDelCliente(usuario.getRut()).stream()
-                    .collect(Collectors.toMap(SeguimientoOrden::idOrdenTrabajo, Function.identity(), (a, b) -> a));
+                            .collect(Collectors.toMap(SeguimientoOrden::idOrdenTrabajo, Function.identity(),
+                                    (a, b) -> a));
             enVivo = true;
         } catch (ServicioExternoException ex) {
             otsDelErp = Map.of();
@@ -330,11 +342,12 @@ public class OrderServiceImpl implements OrderService {
             return;
         }
         try {
-            transactionTemplate.executeWithoutResult(s -> pedidos.forEach(p ->
-                    pedidoRepository.findById(p.getIdPedido())
+            transactionTemplate
+                    .executeWithoutResult(s -> pedidos.forEach(p -> pedidoRepository.findById(p.getIdPedido())
                             .ifPresent(guardado -> guardado.setUltimoEstadoConocido(p.getUltimoEstadoConocido()))));
         } catch (RuntimeException ex) {
-            log.warn("No se pudo actualizar el último estado conocido de {} pedido(s): {}", pedidos.size(), ex.getMessage());
+            log.warn("No se pudo actualizar el último estado conocido de {} pedido(s): {}", pedidos.size(),
+                    ex.getMessage());
         }
     }
 
@@ -369,7 +382,8 @@ public class OrderServiceImpl implements OrderService {
                 pedido.getHorarioPreferido(),
                 pedido.getNotas(),
                 pedido.getItems().stream()
-                        .map(i -> new ItemPedidoDTO(i.getTipoItem(), i.getIdMicroservicio(), i.getCodigo(), i.getNombre(),
+                        .map(i -> new ItemPedidoDTO(i.getTipoItem(), i.getIdMicroservicio(), i.getCodigo(),
+                                i.getNombre(),
                                 i.getCantidad(), i.getPrecioUnitario(), i.getSubtotal()))
                         .toList(),
                 pedido.getSubtotal(),
@@ -380,7 +394,8 @@ public class OrderServiceImpl implements OrderService {
 
     static PedidoResponseDTO respuestaDeOtDelErp(SeguimientoOrden ot) {
         List<ItemPedidoDTO> items = Optional.ofNullable(ot.servicios()).orElse(List.of()).stream()
-                .map(s -> new ItemPedidoDTO(TipoItemTienda.SERVICIO, s.idServicio(), null, s.nombre(), 1, s.precio(), s.precio()))
+                .map(s -> new ItemPedidoDTO(TipoItemTienda.SERVICIO, s.idServicio(), null, s.nombre(), 1, s.precio(),
+                        s.precio()))
                 .toList();
         return new PedidoResponseDTO(
                 null,
@@ -412,7 +427,10 @@ public class OrderServiceImpl implements OrderService {
                 .toList();
     }
 
-    /** Avance armado con el último estado conocido (mismo criterio que ms-workorders). */
+    /**
+     * Avance armado con el último estado conocido (mismo criterio que
+     * ms-workorders).
+     */
     static List<HitoDTO> hitosSegunEstado(String estado) {
         if (estado == null) {
             return List.of();
