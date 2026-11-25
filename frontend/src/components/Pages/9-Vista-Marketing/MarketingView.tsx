@@ -1,268 +1,450 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useCatalog } from "@/hooks/useCatalog";
 import { ElectricalProduct } from "@/types/product";
 import { CatalogCard } from "@/components/Pages/2-Catalog/CatalogCard";
-import { isGoogleDriveUrl, extractDriveFileId, resolveDriveImageUrl } from "@/utils/googleDrive";
+import {
+  isGoogleDriveUrl,
+  extractDriveFileId,
+  resolveDriveImageUrl,
+} from "@/utils/googleDrive";
 
-/**
- * Vista de Marketing para gestión y vinculación de imágenes desde Google Drive.
- * Permite al equipo de marketing:
- * 1. Seleccionar cualquier producto/servicio del catálogo.
- * 2. Pegar un enlace compartido de Google Drive.
- * 3. Validar en tiempo real la extracción del ID de archivo y la URL directa CDN.
- * 4. Previsualizar la tarjeta (Card) tal como aparecerá en el portal e-commerce.
- * 5. Generar el payload JSON listo para guardar en el backend.
- */
+type FilterTab = "ALL" | "SERVICES" | "PRODUCTS" | "MISSING_IMAGE";
+
 export const MarketingView: React.FC = () => {
   const { products, services } = useCatalog();
-  const allItems: ElectricalProduct[] = [...services, ...products];
 
-  const [selectedItemId, setSelectedItemId] = useState<number>(allItems[0]?.id || 1);
+  const allItems = useMemo<ElectricalProduct[]>(
+    () => [
+      ...services.map((s) => ({ ...s, _type: "Servicio" as const })),
+      ...products.map((p) => ({ ...p, _type: "Repuesto" as const })),
+    ],
+    [services, products]
+  );
+
+  // Filtros de tabla (mismo patrón que CatalogoComponent)
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("ALL");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+
+  // Estado del Modal de Edición / Vinculación
+  const [selectedItem, setSelectedItem] = useState<ElectricalProduct | null>(null);
   const [driveUrlInput, setDriveUrlInput] = useState<string>("");
   const [customBadge, setCustomBadge] = useState<string>("");
   const [customDiscount, setCustomDiscount] = useState<number>(0);
-  const [copied, setCopied] = useState<boolean>(false);
 
-  const selectedItem = allItems.find((i) => i.id === selectedItemId) || allItems[0];
+  // Registro local de cambios aplicados en sesión + notificación discreta
+  const [updatedPayloads, setUpdatedPayloads] = useState<Record<number, string>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Contadores para chips
+  const counts = useMemo(() => {
+    const missing = allItems.filter((i) => !i.imageUrl && !updatedPayloads[i.id]).length;
+    return {
+      all: allItems.length,
+      services: services.length,
+      products: products.length,
+      missing,
+    };
+  }, [allItems, services.length, products.length, updatedPayloads]);
+
+  // Filtrado tabular
+  const filteredItems = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return allItems.filter((item) => {
+      const hasImg = Boolean(updatedPayloads[item.id] || item.imageUrl);
+      if (activeFilter === "SERVICES" && item.category === "Repuestos") return false;
+      if (activeFilter === "PRODUCTS" && item.category !== "Repuestos") return false;
+      if (activeFilter === "MISSING_IMAGE" && hasImg) return false;
+
+      if (!q) return true;
+      return (
+        item.code.toLowerCase().includes(q) ||
+        item.name.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q)
+      );
+    });
+  }, [allItems, activeFilter, searchTerm, updatedPayloads]);
+
+  // Abrir modal para un ítem
+  const openEditModal = (item: ElectricalProduct) => {
+    setSelectedItem(item);
+    setDriveUrlInput(updatedPayloads[item.id] || "");
+    setCustomBadge(item.highlightBadge || "");
+    setCustomDiscount(0);
+  };
+
+  const closeModal = () => {
+    setSelectedItem(null);
+    setDriveUrlInput("");
+    setCustomBadge("");
+    setCustomDiscount(0);
+  };
+
+  // Validación en tiempo real dentro del modal
   const isValidDrive = isGoogleDriveUrl(driveUrlInput);
   const fileId = extractDriveFileId(driveUrlInput);
   const directCdnUrl = resolveDriveImageUrl(driveUrlInput);
 
-  // Ítem modificado para previsualización en vivo
-  const previewItem: ElectricalProduct = selectedItem
+  const previewItem: ElectricalProduct | null = selectedItem
     ? {
         ...selectedItem,
-        imageUrl: isValidDrive ? directCdnUrl : selectedItem.imageUrl,
-        highlightBadge: customBadge || selectedItem.highlightBadge,
+        imageUrl: isValidDrive
+          ? directCdnUrl
+          : updatedPayloads[selectedItem.id] || selectedItem.imageUrl,
+        highlightBadge: customBadge.trim() || selectedItem.highlightBadge,
         originalPrice:
           customDiscount > 0
             ? Math.round(selectedItem.price / (1 - customDiscount / 100))
             : selectedItem.originalPrice,
       }
-    : ({} as ElectricalProduct);
+    : null;
 
-  const handleCopyPayload = () => {
+  const handleSaveAndCopy = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem || !isValidDrive) return;
+
     const payload = {
       productId: selectedItem.id,
       productCode: selectedItem.code,
       productName: selectedItem.name,
-      googleDriveUrl: driveUrlInput,
+      googleDriveUrl: driveUrlInput.trim(),
       extractedFileId: fileId,
-      directCdnUrl: directCdnUrl,
-      highlightBadge: customBadge || selectedItem.highlightBadge,
+      directCdnUrl,
+      highlightBadge: customBadge.trim() || selectedItem.highlightBadge || null,
     };
+
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+    setUpdatedPayloads((prev) => ({ ...prev, [selectedItem.id]: directCdnUrl }));
+    showToast(`Imagen vinculada para ${selectedItem.code} y JSON copiado al portapapeles.`);
+    closeModal();
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8 animate-fadeIn">
-      {/* Encabezado */}
-      <div className="pb-1">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-brand-600 text-xs font-semibold mb-2 border border-slate-200">
-              Equipo de Marketing & Catálogo
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Vinculador de Imágenes Google Drive
-            </h1>
-            <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-              Pega cualquier enlace compartido de Google Drive para transformar y publicar instantáneamente fotos comerciales en las tarjetas del e-commerce.
-            </p>
-          </div>
-          <div className="bg-white  px-4 py-3 rounded-xl border border-slate-200 text-xs space-y-1">
-            <span className="text-slate-600 block font-semibold">Formatos Google Drive soportados:</span>
-            <code className="text-brand-600 block">drive.google.com/file/d/ID/view</code>
-            <code className="text-brand-600 block">drive.google.com/open?id=ID</code>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-5 animate-fadeIn">
+      {/* Cabecera estilo ERP */}
+      <header className="page-head mb-0">
+        <div>
+          <h1>Imágenes de catálogo</h1>
+          <p>Vinculación de recursos gráficos desde Google Drive para el portal comercial</p>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Panel de Configuración (7 cols) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 space-y-6">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-            Configuración del Ítem Comercial
-          </h2>
-
-          {/* 1. Selector de Producto / Servicio */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              1. Seleccionar Producto o Servicio a Publicitar
-            </label>
-            <select
-              value={selectedItemId}
-              onChange={(e) => {
-                setSelectedItemId(Number(e.target.value));
-                setDriveUrlInput("");
-              }}
-              className="w-full h-11 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-            >
-              <optgroup label="Servicios Eléctricos en Terreno">
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    [{s.code}] {s.name} - ${s.price.toLocaleString("es-CL")}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Repuestos e Insumos en Stock">
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    [{p.code}] {p.name} - ${p.price.toLocaleString("es-CL")}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
-
-          {/* 2. Enlace de Google Drive */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              2. Enlace Compartido de Google Drive *
-            </label>
-            <div className="relative">
-              <input
-                type="url"
-                placeholder="https://drive.google.com/file/d/1A2B3C4D5E.../view?usp=sharing"
-                value={driveUrlInput}
-                onChange={(e) => setDriveUrlInput(e.target.value)}
-                className={`w-full h-11 pl-3 pr-10 rounded-lg border text-sm outline-none transition ${
-                  driveUrlInput && isValidDrive
-                    ? "border-emerald-500 bg-emerald-50/20 focus:ring-2 focus:ring-emerald-100"
-                    : driveUrlInput && !isValidDrive
-                    ? "border-amber-400 bg-amber-50/20 focus:ring-2 focus:ring-amber-100"
-                    : "border-slate-300 bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+      {/* Panel principal tabular */}
+      <section className="panel overflow-hidden">
+        {/* Chips de filtro */}
+        <div
+          role="tablist"
+          aria-label="Filtrar catálogo"
+          className="px-5 pt-4 pb-3 flex flex-wrap items-center gap-2 border-b border-slate-100"
+        >
+          {[
+            { id: "ALL" as const, label: "Todos", count: counts.all },
+            { id: "SERVICES" as const, label: "Servicios", count: counts.services },
+            { id: "PRODUCTS" as const, label: "Repuestos", count: counts.products },
+            { id: "MISSING_IMAGE" as const, label: "Sin imagen", count: counts.missing },
+          ].map((tab) => {
+            const active = activeFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`inline-flex items-center gap-2 h-8 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  active
+                    ? "bg-brand-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80"
                 }`}
-              />
-            </div>
-
-            {/* Feedback en tiempo real */}
-            {driveUrlInput && (
-              <div className="mt-2 text-xs">
-                {isValidDrive && fileId ? (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 space-y-1">
-                    <p className="font-semibold flex items-center gap-1.5">
-                      Enlace válido de Google Drive reconocido
-                    </p>
-                    <p className="text-[11px] text-emerald-700">
-                      <strong>File ID:</strong> <code className="bg-white/80 px-1 py-0.5 rounded">{fileId}</code>
-                    </p>
-                    <p className="text-[11px] text-emerald-700 break-all">
-                      <strong>CDN Directa:</strong> <a href={directCdnUrl} target="_blank" rel="noreferrer" className="underline">{directCdnUrl}</a>
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-                    Debe ser un enlace de Google Drive (ej: <code>https://drive.google.com/file/d/...</code>) con permisos de lectura pública ("Cualquiera con el enlace").
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 3. Badges y Descuentos de Marketing */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Badge Promocional
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: OFERTA FLASH, MÁS VENDIDO"
-                value={customBadge}
-                onChange={(e) => setCustomBadge(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border border-slate-300 text-xs"
-              />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {["OFERTA FLASH", "MÁS PEDIDO", "SEC OFICIAL", "STOCK INMEDIATO"].map((badge) => (
-                  <button
-                    key={badge}
-                    type="button"
-                    onClick={() => setCustomBadge(badge)}
-                    className="text-[10px] font-medium bg-slate-100 hover:bg-blue-50 hover:text-blue-700 px-2 py-0.5 rounded cursor-pointer transition"
-                  >
-                    +{badge}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Descuento Visual (%)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="range"
-                  min="0"
-                  max="50"
-                  step="5"
-                  value={customDiscount}
-                  onChange={(e) => setCustomDiscount(Number(e.target.value))}
-                  className="flex-1 accent-blue-600 cursor-pointer"
-                />
-                <span className="w-12 text-center text-xs font-bold text-slate-800 bg-slate-100 py-1.5 rounded">
-                  {customDiscount}%
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[11px] tabular-nums ${
+                    active
+                      ? "bg-brand-700 text-brand-50"
+                      : "bg-white text-slate-600"
+                  }`}
+                >
+                  {tab.count}
                 </span>
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Calcula automáticamente el precio original tachado.
-              </p>
-            </div>
-          </div>
-
-          {/* Acciones de Exportación */}
-          <div className="border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-slate-500">
-              Sincronización lista con <code>digitalfix-ms-catalog</code>
-            </span>
-            <button
-              type="button"
-              onClick={handleCopyPayload}
-              disabled={!isValidDrive}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition shadow-xs flex items-center gap-2 cursor-pointer"
-            >
-              {copied ? "¡JSON Copiado al Portapapeles!" : "Copiar Configuración para Backend"}
-            </button>
-          </div>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Previsualización en Vivo de la Tarjeta (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-              Vista Previa en Vivo (E-commerce Card)
-            </h2>
-            <span className="text-[11px] text-slate-500">
-              Así lo verá el cliente final
-            </span>
-          </div>
-
-          {/* Renderizado real del componente CatalogCard */}
-          <div className="max-w-[340px] mx-auto lg:mx-0">
-            {previewItem && (
-              <CatalogCard
-                item={previewItem}
-                actionLabel={previewItem.category === "Repuestos" ? "Agregar al carrito" : "Solicitar"}
-                onAction={() => alert(`Previsualización: Acción sobre "${previewItem.name}"`)}
-              />
+        {/* Barra de búsqueda */}
+        <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-200">
+          <div className="search-group max-w-md !bg-white">
+            <input
+              type="search"
+              placeholder="Buscar por código, nombre o categoría..."
+              aria-label="Buscar en el catálogo"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="px-2 text-xs font-semibold text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                Limpiar
+              </button>
             )}
           </div>
+        </div>
 
-          <div className="bg-sky-50 border border-sky-100 rounded-xl p-4 text-xs text-sky-900 space-y-1.5">
-            <h4 className="font-semibold flex items-center gap-1.5 text-blue-900">
-              E-commerce Desacoplado ISO 25010
-            </h4>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Las imágenes renderizadas a través de este canal quedan desacopladas del ERP técnico interno. Los clientes B2C/B2B disfrutan de carga rápida y CDN directa sin exponer credenciales de Google Workspace.
-            </p>
+        {/* Tabla de ítems */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="py-3 px-5">Código</th>
+                <th className="py-3 px-4">Ítem comercial</th>
+                <th className="py-3 px-4">Categoría</th>
+                <th className="py-3 px-4">Precio</th>
+                <th className="py-3 px-4">Estado imagen</th>
+                <th className="py-3 px-5 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-[13px]">
+              {filteredItems.map((item) => {
+                const resolvedImg = updatedPayloads[item.id] || item.imageUrl;
+                return (
+                  <tr
+                    key={item.id}
+                    className="hover:bg-slate-50/80 transition-colors"
+                  >
+                    <td className="py-3 px-5 font-mono text-xs font-semibold text-slate-600 whitespace-nowrap">
+                      {item.code}
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center text-[10px] font-mono text-slate-400">
+                          {resolvedImg ? (
+                            <img
+                              src={resolvedImg}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            "N/A"
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 truncate max-w-xs sm:max-w-md">
+                            {item.name}
+                          </div>
+                          {item.highlightBadge && (
+                            <span className="text-[11px] text-brand-600 font-medium">
+                              Etiqueta: {item.highlightBadge}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
+                      {item.category}
+                    </td>
+
+                    <td className="py-3 px-4 font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+                      ${item.price.toLocaleString("es-CL")}
+                    </td>
+
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {resolvedImg ? (
+                        <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Vinculada
+                        </span>
+                      ) : (
+                        <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                          Sin imagen
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-5 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(item)}
+                        className="btn-secondary !min-h-[32px] !px-3 !text-xs"
+                      >
+                        {resolvedImg ? "Cambiar imagen" : "Vincular imagen"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredItems.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-10 text-center text-xs text-slate-500">
+                    No hay ítems que coincidan con los filtros seleccionados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Modal de Vinculación y Vista Previa (idéntico flujo a CatalogoComponent) */}
+      {selectedItem && previewItem && (
+        <div
+          onClick={closeModal}
+          className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-2xs flex items-center justify-center p-4 animate-fadeIn"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-img-title"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+          >
+            {/* Header del Modal */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 id="modal-img-title" className="text-base font-bold text-slate-900">
+                  Vincular imagen · {selectedItem.code}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {selectedItem.name} · Los campos con * son obligatorios.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="btn-ghost !min-h-[32px] !px-2.5 text-slate-500"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {/* Cuerpo del Modal: Formulario a la izquierda + Preview real a la derecha */}
+            <form onSubmit={handleSaveAndCopy} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* Controles (7 cols) */}
+                <div className="md:col-span-7 space-y-4">
+                  <div>
+                    <label className="label" htmlFor="drive-url">
+                      Enlace compartido de Google Drive *
+                    </label>
+                    <input
+                      id="drive-url"
+                      type="url"
+                      placeholder="https://drive.google.com/file/d/.../view"
+                      value={driveUrlInput}
+                      onChange={(e) => setDriveUrlInput(e.target.value)}
+                      required
+                      className="input font-mono text-xs"
+                    />
+                    {driveUrlInput && !isValidDrive && (
+                      <p className="text-[11px] text-red-600 mt-1">
+                        Ingrese un enlace válido de Google Drive con acceso público de lectura.
+                      </p>
+                    )}
+                    {isValidDrive && fileId && (
+                      <p className="text-[11px] text-emerald-700 mt-1 font-mono">
+                        ID reconocido: {fileId}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="label" htmlFor="promo-badge">
+                      Etiqueta destacada (opcional)
+                    </label>
+                    <input
+                      id="promo-badge"
+                      type="text"
+                      placeholder="Ej: OFERTA, SEC OFICIAL, STOCK INMEDIATO"
+                      value={customBadge}
+                      onChange={(e) => setCustomBadge(e.target.value)}
+                      className="input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label" htmlFor="visual-discount">
+                      Descuento referencial en tarjeta ({customDiscount}%)
+                    </label>
+                    <input
+                      id="visual-discount"
+                      type="range"
+                      min="0"
+                      max="50"
+                      step="5"
+                      value={customDiscount}
+                      onChange={(e) => setCustomDiscount(Number(e.target.value))}
+                      className="w-full accent-brand-600 cursor-pointer"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Calcula el precio anterior tachado para previsualización.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Vista previa compacta (5 cols) */}
+                <div className="md:col-span-5 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                  <span className="eyebrow block">Vista previa en portal</span>
+                  <div className="pointer-events-none">
+                    <CatalogCard
+                      item={previewItem}
+                      actionLabel={
+                        previewItem.category === "Repuestos"
+                          ? "Agregar al carrito"
+                          : "Solicitar"
+                      }
+                      onAction={() => {}}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Pie del Modal */}
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="btn-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!isValidDrive}
+                  className="btn-primary"
+                >
+                  Guardar y copiar JSON
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Notificación discreta */}
+      {toastMessage && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg border border-slate-700 flex items-center gap-4 max-w-md animate-slideUp text-xs"
+        >
+          <span className="font-medium">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="shrink-0 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
     </div>
   );
 };
-

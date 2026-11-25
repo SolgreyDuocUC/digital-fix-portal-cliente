@@ -3,11 +3,19 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { changePassword } from "../../../services/authService";
 import { errorMessage } from "../../../services/api";
 import { CommuneSelect, CommuneValue } from "../../ui/CommuneSelect";
+import { SystemRole } from "../../../types/commercial";
 
 interface ProfilePageProps {
   /** Opcional: si se entrega, se muestra el acceso directo a "Mis órdenes". */
   onOpenOrderTracking?: () => void;
 }
+
+const ROL_ETIQUETA: Record<SystemRole, string> = {
+  CLIENTE: "Cliente",
+  VENDEDOR: "Ejecutivo de Ventas",
+  ASISTENTE_MARKETING: "Asistente de Marketing",
+  JEFE_VENTAS: "Jefe de Ventas y Operaciones",
+};
 
 const getInitials = (name: string): string => {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -16,7 +24,11 @@ const getInitials = (name: string): string => {
   return (words[0][0] + words[1][0]).toUpperCase();
 };
 
-const Section: React.FC<{ title: string; action?: ReactNode; children: ReactNode }> = ({ title, action, children }) => (
+const Section: React.FC<{ title: string; action?: ReactNode; children: ReactNode }> = ({
+  title,
+  action,
+  children,
+}) => (
   <section className="panel">
     <header className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
       <h2 className="text-base font-semibold text-slate-900">{title}</h2>
@@ -29,7 +41,9 @@ const Section: React.FC<{ title: string; action?: ReactNode; children: ReactNode
 const Row: React.FC<{ label: string; value?: string }> = ({ label, value }) => (
   <div className="px-6 py-3 grid grid-cols-1 sm:grid-cols-3 gap-1">
     <dt className="text-xs text-slate-500 sm:pt-0.5">{label}</dt>
-    <dd className="sm:col-span-2 text-sm text-slate-900 break-words">{value || "Sin registrar"}</dd>
+    <dd className="sm:col-span-2 text-sm text-slate-900 break-words">
+      {value || "Sin registrar"}
+    </dd>
   </div>
 );
 
@@ -37,7 +51,9 @@ const Aviso: React.FC<{ tipo: "ok" | "error"; children: ReactNode }> = ({ tipo, 
   <div
     role={tipo === "error" ? "alert" : "status"}
     className={`rounded-lg border px-3 py-2.5 text-xs ${
-      tipo === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"
+      tipo === "error"
+        ? "border-red-200 bg-red-50 text-red-700"
+        : "border-emerald-200 bg-emerald-50 text-emerald-800"
     }`}
   >
     {children}
@@ -48,10 +64,18 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
   const { user, updateProfile, logout } = useAuth();
 
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ firstName: "", lastName: "", businessName: "", phone: "", address: "" });
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    businessName: "",
+    phone: "",
+    address: "",
+  });
   const [location, setLocation] = useState<CommuneValue>({});
   const [saving, setSaving] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [profileMsg, setProfileMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(
+    null
+  );
 
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState({ actual: "", nueva: "", repetir: "" });
@@ -59,6 +83,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
   const [pwMsg, setPwMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   if (!user) return null;
+
+  const isClient = user.role === "CLIENTE";
 
   const empezarEdicion = () => {
     setForm({
@@ -75,7 +101,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
 
   const guardarPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.firstName.trim()) return setProfileMsg({ tipo: "error", texto: "El nombre es obligatorio." });
+    if (!form.firstName.trim())
+      return setProfileMsg({ tipo: "error", texto: "El nombre es obligatorio." });
     setSaving(true);
     setProfileMsg(null);
     try {
@@ -83,7 +110,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         businessName: form.businessName.trim(),
-        // Vacío no se envía: el backend exige un teléfono válido si viene.
         phone: form.phone.trim() || undefined,
         address: form.address.trim(),
         communeId: location.communeId,
@@ -101,8 +127,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
 
   const guardarPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pw.nueva.length < 8) return setPwMsg({ tipo: "error", texto: "La nueva contraseña debe tener al menos 8 caracteres." });
-    if (pw.nueva !== pw.repetir) return setPwMsg({ tipo: "error", texto: "Las contraseñas nuevas no coinciden." });
+    if (pw.nueva.length < 8)
+      return setPwMsg({
+        tipo: "error",
+        texto: "La nueva contraseña debe tener al menos 8 caracteres.",
+      });
+    if (pw.nueva !== pw.repetir)
+      return setPwMsg({ tipo: "error", texto: "Las contraseñas nuevas no coinciden." });
     setPwSaving(true);
     setPwMsg(null);
     try {
@@ -117,7 +148,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
     }
   };
 
-  const campo = (key: keyof typeof form, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+  const campo = (
+    key: keyof typeof form,
+    label: string,
+    extra: React.InputHTMLAttributes<HTMLInputElement> = {}
+  ) => (
     <div>
       <label htmlFor={`perfil-${key}`} className="label">
         {label}
@@ -135,28 +170,48 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
   const ubicacion = [user.commune, user.region].filter(Boolean).join(", ");
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+    <div className="max-w-3xl mx-auto px-4 py-8 space-y-4 animate-fadeIn">
       <div className="page-head">
-        <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">Mi cuenta</h1>
-        <button type="button" onClick={logout} className="btn-secondary hover:text-red-600 hover:border-red-300">
-          Cerrar sesión
-        </button>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">Mi cuenta</h1>
+          {!isClient && (
+            <p className="text-xs text-slate-500">
+              Datos personales y credenciales de acceso al portal interno
+            </p>
+          )}
+        </div>
+        {isClient && (
+          <button
+            type="button"
+            onClick={logout}
+            className="btn-secondary hover:text-red-600 hover:border-red-300"
+          >
+            Cerrar sesión
+          </button>
+        )}
       </div>
 
       <section className="panel p-6 flex items-center gap-4">
         <div
           aria-hidden="true"
-          className="w-14 h-14 shrink-0 rounded-full bg-brand-600 text-white flex items-center justify-center text-lg font-semibold"
+          className="w-14 h-14 shrink-0 rounded-xl bg-brand-600 text-white flex items-center justify-center text-lg font-semibold"
         >
           {getInitials(user.fullName)}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-lg font-semibold text-slate-900 truncate">{user.fullName}</p>
-          <p className="text-sm text-slate-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-slate-900 truncate">{user.fullName}</p>
+            {!isClient && (
+              <span className="badge bg-brand-50 text-brand-700 border border-brand-200">
+                {ROL_ETIQUETA[user.role]}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 mt-0.5">
             {user.rut ? `RUT ${user.rut}` : "Sin RUT registrado"} · {user.email}
           </p>
         </div>
-        {onOpenOrderTracking && (
+        {isClient && onOpenOrderTracking && (
           <button type="button" onClick={onOpenOrderTracking} className="btn-primary shrink-0">
             Mis órdenes
           </button>
@@ -166,7 +221,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
       {profileMsg && !editing && <Aviso tipo={profileMsg.tipo}>{profileMsg.texto}</Aviso>}
 
       <Section
-        title="Datos de contacto"
+        title={isClient ? "Datos de contacto" : "Ficha del ejecutivo"}
         action={
           !editing && (
             <button type="button" onClick={empezarEdicion} className="btn-ghost text-brand-600">
@@ -177,24 +232,40 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
       >
         {!editing ? (
           <dl className="divide-y divide-slate-100">
-            {user.businessName && <Row label="Razón social" value={user.businessName} />}
-            <Row label={user.businessName ? "Contacto" : "Nombre"} value={[user.firstName, user.lastName].filter(Boolean).join(" ")} />
+            {!isClient && <Row label="Cargo / Rol" value={ROL_ETIQUETA[user.role]} />}
+            {isClient && user.businessName && (
+              <Row label="Razón social" value={user.businessName} />
+            )}
+            <Row
+              label={isClient && user.businessName ? "Contacto" : "Nombre"}
+              value={[user.firstName, user.lastName].filter(Boolean).join(" ")}
+            />
             <Row label="Teléfono" value={user.phone} />
-            <Row label="Dirección" value={user.address} />
-            <Row label="Comuna" value={ubicacion} />
+            {isClient && (
+              <>
+                <Row label="Dirección" value={user.address} />
+                <Row label="Comuna" value={ubicacion} />
+              </>
+            )}
           </dl>
         ) : (
           <form onSubmit={guardarPerfil} className="p-6 space-y-4">
             {profileMsg && <Aviso tipo={profileMsg.tipo}>{profileMsg.texto}</Aviso>}
-            {user.role === "CLIENTE" && campo("businessName", "Razón social (si es empresa)")}
+            {isClient && campo("businessName", "Razón social (si es empresa)")}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {campo("firstName", "Nombre *", { autoComplete: "given-name" })}
               {campo("lastName", "Apellidos", { autoComplete: "family-name" })}
             </div>
             {campo("phone", "Teléfono", { type: "tel", autoComplete: "tel" })}
-            {campo("address", "Dirección", { autoComplete: "street-address" })}
-            <CommuneSelect idPrefix="perfil" value={location} onChange={setLocation} />
-            <p className="text-xs text-slate-500">El RUT y el correo no se pueden cambiar desde el portal.</p>
+            {isClient && (
+              <>
+                {campo("address", "Dirección", { autoComplete: "street-address" })}
+                <CommuneSelect idPrefix="perfil" value={location} onChange={setLocation} />
+              </>
+            )}
+            <p className="text-xs text-slate-500">
+              El RUT y el correo no se pueden cambiar desde el portal.
+            </p>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setEditing(false)} className="btn-secondary">
                 Cancelar
@@ -211,7 +282,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
         title="Seguridad"
         action={
           !pwOpen && (
-            <button type="button" onClick={() => { setPwOpen(true); setPwMsg(null); }} className="btn-ghost text-brand-600">
+            <button
+              type="button"
+              onClick={() => {
+                setPwOpen(true);
+                setPwMsg(null);
+              }}
+              className="btn-ghost text-brand-600"
+            >
               Cambiar contraseña
             </button>
           )
@@ -220,7 +298,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenOrderTracking })
         {!pwOpen ? (
           <div className="px-6 py-4 space-y-3">
             {pwMsg && <Aviso tipo={pwMsg.tipo}>{pwMsg.texto}</Aviso>}
-            <p className="text-sm text-slate-600">Tu contraseña protege tus pedidos y datos de facturación.</p>
+            <p className="text-sm text-slate-600">
+              {isClient
+                ? "Tu contraseña protege tus pedidos y datos de facturación."
+                : "Mantén tu clave actualizada para proteger el acceso al sistema comercial."}
+            </p>
           </div>
         ) : (
           <form onSubmit={guardarPassword} className="p-6 space-y-4">

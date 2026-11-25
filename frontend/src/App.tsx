@@ -4,9 +4,9 @@ import { CartProvider } from "./contexts/CartContext";
 import { OrderProvider } from "./contexts/OrderContext";
 import { CommercialProvider } from "./contexts/CommercialContext";
 import { CatalogProvider } from "./contexts/CatalogContext";
-import { StaffHeader } from "./components/Layout/StaffHeader";
 import { Header } from "./components/Layout/Header";
 import { Footer } from "./components/Layout/Footer";
+import { ExecutiveShell, ExecutiveSection } from "./components/Layout/ExecutiveShell";
 import { HomePage } from "./components/Pages/1-Home/HomePage";
 import { ServicesPage } from "./components/Pages/2-Catalog/ServicesPage";
 import { ProductsPage } from "./components/Pages/2-Catalog/ProductsPage";
@@ -22,14 +22,21 @@ import { MarketingCampaignsView } from "./components/Pages/9-Vista-Marketing/Mar
 import { VendorPortalView } from "./components/Pages/10-Vendor/VendorPortalView";
 import { SalesHeadPortalView } from "./components/Pages/11-SalesHead/SalesHeadPortalView";
 import { CatalogView } from "./types/catalog";
+import { SystemRole } from "./types/commercial";
 
 type NavTab = "catalog" | "my-orders" | "profile" | "marketing";
 
+const DEFAULT_EXEC_SECTION: Record<Exclude<SystemRole, "CLIENTE">, ExecutiveSection> = {
+  VENDEDOR: "ventas-pedidos",
+  ASISTENTE_MARKETING: "mkt-campanas",
+  JEFE_VENTAS: "jefatura-aprobaciones",
+};
+
 const PortalContent: React.FC = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
-  // Sin sesión se navega la tienda como cliente; el rol interno solo se obtiene ingresando con esa cuenta.
   const currentRole = user?.role || "CLIENTE";
 
+  // Estado Portal Cliente
   const [currentTab, setCurrentTab] = useState<NavTab>("catalog");
   const [catalogView, setCatalogView] = useState<CatalogView>("home");
   const [search, setSearch] = useState<string>("");
@@ -40,9 +47,17 @@ const PortalContent: React.FC = () => {
   const [registerOpen, setRegisterOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Al cerrar sesión desde Mi cuenta se vuelve a la tienda.
+  // Estado Panel Ejecutivo (ERP Sidebar)
+  const [execSection, setExecSection] = useState<ExecutiveSection>("ventas-pedidos");
+
+  // Al cerrar sesión desde Mi cuenta se vuelve a la tienda; al entrar como ejecutivo va a su vista inicial
   useEffect(() => {
-    if (!user && currentTab === "profile") setCurrentTab("catalog");
+    if (!user && currentTab === "profile") {
+      setCurrentTab("catalog");
+    }
+    if (user && user.role !== "CLIENTE") {
+      setExecSection(DEFAULT_EXEC_SECTION[user.role]);
+    }
   }, [user, currentTab]);
 
   const handleCheckoutSuccess = (newOrderId: string) => {
@@ -53,13 +68,11 @@ const PortalContent: React.FC = () => {
     }, 7000);
   };
 
-  /** Navega dentro del catálogo y opcionalmente filtra por categoría */
   const handleCatalogNavigate = (view: Exclude<CatalogView, "home">, category?: string) => {
     setCatalogView(view);
     if (category) setSelectedCategory(category);
   };
 
-  /** Pestañas de categorías del encabezado. */
   const handleBrowse = (category: string) => {
     setCurrentTab("catalog");
     if (category === "Repuestos") {
@@ -75,53 +88,52 @@ const PortalContent: React.FC = () => {
 
   const handleProceedCheckout = () => {
     setCartOpen(false);
-    // El pedido queda a nombre de una cuenta: sin sesión, primero se ingresa (el carrito se conserva).
     if (isAuthenticated) setCheckoutOpen(true);
     else setLoginOpen(true);
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">Cargando portal...</div>
+      <div className="min-h-screen flex items-center justify-center text-sm text-slate-500">
+        Cargando portal...
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen flex flex-col text-slate-900">
-      {/* ROL: VENDEDOR / ASESOR EN TERRENO (Maipú / Asesoría) */}
-      {currentRole === "VENDEDOR" && (
-        <div className="flex-1 flex flex-col">
-          <StaffHeader />
-          <main className="flex-1">
-            <VendorPortalView />
-          </main>
-          <Footer />
-        </div>
+      {/* =====================================================================
+          PORTAL INTERNO / EJECUTIVOS (Vendedor, Marketing, Jefe de Ventas)
+         ===================================================================== */}
+      {currentRole !== "CLIENTE" && (
+        <ExecutiveShell activeSection={execSection} onSelectSection={setExecSection}>
+          {(execSection === "ventas-pedidos" || execSection === "ventas-clientes") && (
+            <VendorPortalView
+              initialSubView={execSection === "ventas-clientes" ? "quotes" : "hub"}
+            />
+          )}
+
+          {(execSection === "mkt-campanas" || execSection === "mkt-resenas") && (
+            <MarketingCampaignsView
+              initialSubView={execSection === "mkt-resenas" ? "reviews" : "hub"}
+            />
+          )}
+
+          {execSection === "mkt-catalogo" && <MarketingView />}
+
+          {(execSection === "jefatura-aprobaciones" || execSection === "jefatura-reportes") && (
+            <SalesHeadPortalView
+              initialSubView={execSection === "jefatura-reportes" ? "kpis" : "hub"}
+            />
+          )}
+
+          {execSection === "mi-perfil" && <ProfilePage />}
+        </ExecutiveShell>
       )}
 
-      {/* ROL: ASISTENTE DE OPERACIONES COMERCIALES (Marketing & Campañas) */}
-      {currentRole === "ASISTENTE_MARKETING" && (
-        <div className="flex-1 flex flex-col">
-          <StaffHeader />
-          <main className="flex-1">
-            <MarketingCampaignsView />
-          </main>
-          <Footer />
-        </div>
-      )}
-
-      {/* ROL: JEFE DE VENTAS Y OPERACIONES (Aprobación & KPIs) */}
-      {currentRole === "JEFE_VENTAS" && (
-        <div className="flex-1 flex flex-col">
-          <StaffHeader />
-          <main className="flex-1">
-            <SalesHeadPortalView />
-          </main>
-          <Footer />
-        </div>
-      )}
-
-      {/* ROL: CLIENTE B2C / B2B (E-commerce Desacoplado estilo Mercado Libre) */}
+      {/* =====================================================================
+          PORTAL PÚBLICO / CLIENTES B2C y B2B
+         ===================================================================== */}
       {currentRole === "CLIENTE" && (
         <>
           <Header
@@ -160,9 +172,7 @@ const PortalContent: React.FC = () => {
                   />
                 )}
 
-                {catalogView === "products" && (
-                  <ProductsPage searchQuery={search} />
-                )}
+                {catalogView === "products" && <ProductsPage searchQuery={search} />}
               </>
             )}
 
@@ -173,21 +183,28 @@ const PortalContent: React.FC = () => {
               />
             )}
 
-            {currentTab === "profile" && <ProfilePage onOpenOrderTracking={() => setCurrentTab("my-orders")} />}
+            {currentTab === "profile" && (
+              <ProfilePage onOpenOrderTracking={() => setCurrentTab("my-orders")} />
+            )}
 
-            {currentTab === "marketing" && <MarketingView />}
+            {/* Planes y Ofertas públicas para el cliente (lleva al catálogo de servicios) */}
+            {currentTab === "marketing" && (
+              <ServicesPage
+                searchQuery={search}
+                selectedCategory={selectedCategory}
+                onSelectCategory={setSelectedCategory}
+              />
+            )}
           </main>
 
           <Footer />
 
-          {/* Drawer lateral de Carrito */}
           <CartDrawer
             isOpen={cartOpen}
             onClose={() => setCartOpen(false)}
             onProceedCheckout={handleProceedCheckout}
           />
 
-          {/* Modal de Despacho y Confirmación de Orden */}
           <CheckoutModal
             isOpen={checkoutOpen}
             onClose={() => setCheckoutOpen(false)}
@@ -215,7 +232,7 @@ const PortalContent: React.FC = () => {
         }}
       />
 
-      {/* Notificación flotante de confirmación estilo Mercado Libre */}
+      {/* Notificación flotante de confirmación */}
       {toastMessage && (
         <div
           role="status"
