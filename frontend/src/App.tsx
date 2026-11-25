@@ -27,9 +27,9 @@ import { SystemRole } from "./types/commercial";
 type NavTab = "catalog" | "my-orders" | "profile" | "marketing";
 
 const DEFAULT_EXEC_SECTION: Record<Exclude<SystemRole, "CLIENTE">, ExecutiveSection> = {
-  VENDEDOR: "ventas-pedidos",
-  ASISTENTE_MARKETING: "mkt-campanas",
-  JEFE_VENTAS: "jefatura-aprobaciones",
+  VENDEDOR: "ventas-hub",
+  ASISTENTE_MARKETING: "mkt-hub",
+  JEFE_VENTAS: "jefatura-hub",
 };
 
 const PortalContent: React.FC = () => {
@@ -48,7 +48,7 @@ const PortalContent: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Estado Panel Ejecutivo (ERP Sidebar)
-  const [execSection, setExecSection] = useState<ExecutiveSection>("ventas-pedidos");
+  const [execSection, setExecSection] = useState<ExecutiveSection>("ventas-hub");
 
   // Al cerrar sesión desde Mi cuenta se vuelve a la tienda; al entrar como ejecutivo va a su vista inicial
   useEffect(() => {
@@ -107,23 +107,57 @@ const PortalContent: React.FC = () => {
          ===================================================================== */}
       {currentRole !== "CLIENTE" && (
         <ExecutiveShell activeSection={execSection} onSelectSection={setExecSection}>
-          {(execSection === "ventas-pedidos" || execSection === "ventas-clientes") && (
+          {(execSection === "ventas-hub" ||
+            execSection === "ventas-cotizaciones" ||
+            execSection === "ventas-nueva") && (
             <VendorPortalView
-              initialSubView={execSection === "ventas-clientes" ? "quotes" : "hub"}
+              initialSubView={
+                execSection === "ventas-cotizaciones"
+                  ? "quotes"
+                  : execSection === "ventas-nueva"
+                  ? "create-quote"
+                  : "hub"
+              }
+              onNavigateSection={setExecSection}
             />
           )}
 
-          {(execSection === "mkt-campanas" || execSection === "mkt-resenas") && (
+          {(execSection === "mkt-hub" ||
+            execSection === "mkt-nueva" ||
+            execSection === "mkt-campanas" ||
+            execSection === "mkt-catalogo" ||
+            execSection === "mkt-resenas") && (
             <MarketingCampaignsView
-              initialSubView={execSection === "mkt-resenas" ? "reviews" : "hub"}
+              initialSubView={
+                execSection === "mkt-nueva"
+                  ? "new-campaign"
+                  : execSection === "mkt-campanas"
+                  ? "history"
+                  : execSection === "mkt-catalogo"
+                  ? "enrichment"
+                  : execSection === "mkt-resenas"
+                  ? "reviews"
+                  : "hub"
+              }
+              onNavigateSection={setExecSection}
             />
           )}
 
-          {execSection === "mkt-catalogo" && <MarketingView />}
-
-          {(execSection === "jefatura-aprobaciones" || execSection === "jefatura-reportes") && (
+          {(execSection === "jefatura-hub" ||
+            execSection === "jefatura-aprobaciones" ||
+            execSection === "jefatura-reportes" ||
+            execSection === "jefatura-comunas") && (
             <SalesHeadPortalView
-              initialSubView={execSection === "jefatura-reportes" ? "kpis" : "hub"}
+              initialSubView={
+                execSection === "jefatura-aprobaciones"
+                  ? "approvals"
+                  : execSection === "jefatura-reportes"
+                  ? "kpis"
+                  : execSection === "jefatura-comunas"
+                  ? "reports"
+                  : "hub"
+              }
+              onNavigateSection={setExecSection}
             />
           )}
 

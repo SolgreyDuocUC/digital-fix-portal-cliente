@@ -65,7 +65,7 @@ export const ReviewsAnalyticsView: React.FC<ReviewsAnalyticsViewProps> = ({
   };
 
   return (
-    <div className={embedded ? "space-y-6 animate-fadeIn" : "max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6 animate-fadeIn"}>
+    <div className={embedded ? "w-full space-y-6 animate-fadeIn" : "w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fadeIn"}>
       <header className="page-head mb-0">
         <div>
           <span className="eyebrow">Calidad y Feedback</span>

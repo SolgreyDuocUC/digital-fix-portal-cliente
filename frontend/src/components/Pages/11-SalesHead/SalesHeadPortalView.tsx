@@ -5,6 +5,7 @@ import { formatPrice } from "@/utils/currency";
 import { resolveDriveImageUrl } from "@/utils/googleDrive";
 import { QuickAccessList, QuickAccessItem } from "@/components/ui/QuickAccessList";
 import { ReviewsAnalyticsView } from "../12-Reviews/ReviewsAnalyticsView";
+import { ExecutiveSection } from "@/components/Layout/ExecutiveShell";
 
 export type SalesHeadSubView = "hub" | "approvals" | "kpis" | "reports" | "reviews";
 type ApprovalFilter = "ALL" | "PENDIENTE_APROBACION" | "APROBADA" | "RECHAZADA";
@@ -12,14 +13,15 @@ type ApprovalFilter = "ALL" | "PENDIENTE_APROBACION" | "APROBADA" | "RECHAZADA";
 interface SalesHeadPortalViewProps {
   initialSubView?: SalesHeadSubView;
   embedded?: boolean;
+  onNavigateSection?: (section: ExecutiveSection) => void;
 }
 
-const VIEW_LABELS: Record<SalesHeadSubView, string> = {
-  hub: "Accesos Rápidos",
-  approvals: "Aprobación de Promociones",
-  kpis: "KPIs Operativos y Comerciales",
-  reports: "Informes por Comuna",
-  reviews: "Reseñas y Oportunidades",
+const SUBVIEW_TO_SECTION: Record<SalesHeadSubView, ExecutiveSection> = {
+  hub: "jefatura-hub",
+  approvals: "jefatura-aprobaciones",
+  kpis: "jefatura-reportes",
+  reports: "jefatura-comunas",
+  reviews: "mkt-resenas",
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -37,6 +39,7 @@ const STATUS_LABEL: Record<string, string> = {
 export const SalesHeadPortalView: React.FC<SalesHeadPortalViewProps> = ({
   initialSubView = "hub",
   embedded = false,
+  onNavigateSection,
 }) => {
   const { campaigns, approveCampaign, rejectCampaign, kpis } = useCommercial();
 
@@ -52,6 +55,13 @@ export const SalesHeadPortalView: React.FC<SalesHeadPortalViewProps> = ({
   useEffect(() => {
     setSubView(initialSubView);
   }, [initialSubView]);
+
+  const navigate = (next: SalesHeadSubView) => {
+    setSubView(next);
+    if (!embedded) {
+      onNavigateSection?.(SUBVIEW_TO_SECTION[next]);
+    }
+  };
 
   const counts = useMemo(() => {
     const pending = campaigns.filter((c) => c.status === "PENDIENTE_APROBACION").length;
@@ -119,79 +129,34 @@ export const SalesHeadPortalView: React.FC<SalesHeadPortalViewProps> = ({
       id: "approvals",
       title: `Aprobación de Promociones (${counts.pending} pendientes)`,
       description: "Revisión de márgenes, vigencia e ítems de campañas enviadas por Marketing.",
-      onClick: () => setSubView("approvals"),
+      onClick: () => navigate("approvals"),
     },
     {
       id: "kpis",
       title: "KPIs Operativos y Comerciales",
       description: `Ventas mensuales (${formatPrice(kpis.totalSalesMonth)}), tasa de conversión (${kpis.conversionRate}%) y rendimiento por asesor.`,
-      onClick: () => setSubView("kpis"),
+      onClick: () => navigate("kpis"),
     },
     {
       id: "reports",
       title: "Informes de Demanda por Comuna",
       description: "Distribución de órdenes, tickets promedio y cobertura de cuadrillas SEC.",
-      onClick: () => setSubView("reports"),
+      onClick: () => navigate("reports"),
     },
     {
       id: "reviews",
       title: "Reseñas y Oportunidades de Mejora",
       description: "Auditoría de satisfacción post-servicio y seguimiento de planes correctivos.",
-      onClick: () => setSubView("reviews"),
+      onClick: () => navigate("reviews"),
     },
   ];
 
   const containerClass = embedded
-    ? "space-y-6 animate-fadeIn"
-    : "max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6 animate-fadeIn";
+    ? "w-full space-y-6 animate-fadeIn"
+    : "w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fadeIn";
 
   return (
     <div className={containerClass}>
-      {/* Barra superior breadcrumb (solo cuando no está embebida en otro módulo) */}
-      {!embedded && (
-        <div className="panel px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => setSubView("hub")}
-              className="font-semibold text-slate-600 hover:text-brand-600 transition-colors cursor-pointer"
-            >
-              Jefatura de Ventas y Operaciones
-            </button>
-            <span className="text-slate-400">/</span>
-            <span className="font-bold text-slate-900">{VIEW_LABELS[subView]}</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(
-              [
-                { id: "hub", label: "Hub" },
-                { id: "approvals", label: `Aprobaciones (${counts.pending})` },
-                { id: "kpis", label: "KPIs" },
-                { id: "reports", label: "Por Comuna" },
-                { id: "reviews", label: "Reseñas" },
-              ] as const
-            ).map((pill) => {
-              const active = subView === pill.id;
-              return (
-                <button
-                  key={pill.id}
-                  type="button"
-                  onClick={() => setSubView(pill.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer tabular-nums ${
-                    active
-                      ? "bg-brand-600 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200/80"
-                  }`}
-                >
-                  {pill.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* HUB PRINCIPAL */}
       {subView === "hub" && !embedded && (
         <>
@@ -208,7 +173,7 @@ export const SalesHeadPortalView: React.FC<SalesHeadPortalViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setSubView("approvals")}
+              onClick={() => navigate("approvals")}
               className="btn-primary h-10 px-5 shrink-0"
             >
               Revisar aprobaciones

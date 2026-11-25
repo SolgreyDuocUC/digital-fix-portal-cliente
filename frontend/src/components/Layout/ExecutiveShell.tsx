@@ -3,13 +3,18 @@ import { useAuth } from "../../contexts/AuthContext";
 import { SystemRole } from "../../types/commercial";
 
 export type ExecutiveSection =
-  | "ventas-pedidos"
-  | "ventas-clientes"
+  | "ventas-hub"
+  | "ventas-cotizaciones"
+  | "ventas-nueva"
+  | "mkt-hub"
+  | "mkt-nueva"
   | "mkt-campanas"
   | "mkt-catalogo"
   | "mkt-resenas"
+  | "jefatura-hub"
   | "jefatura-aprobaciones"
   | "jefatura-reportes"
+  | "jefatura-comunas"
   | "mi-perfil";
 
 interface ExecutiveShellProps {
@@ -38,17 +43,22 @@ const GROUP_ORDER: NavGroup[] = ["Ventas", "Marketing", "Jefatura", "Mi espacio"
 
 const MENU_ITEMS: NavOption[] = [
   // Ventas
-  { id: "ventas-pedidos", label: "Órdenes y Cotizaciones", group: "Ventas", roles: ["VENDEDOR", "JEFE_VENTAS"] },
-  { id: "ventas-clientes", label: "Cartera de Clientes", group: "Ventas", roles: ["VENDEDOR", "JEFE_VENTAS"] },
+  { id: "ventas-hub", label: "Resumen de Ventas", group: "Ventas", roles: ["VENDEDOR", "JEFE_VENTAS"] },
+  { id: "ventas-cotizaciones", label: "Solicitudes de Cotización", group: "Ventas", roles: ["VENDEDOR", "JEFE_VENTAS"] },
+  { id: "ventas-nueva", label: "Nueva Solicitud", group: "Ventas", roles: ["VENDEDOR", "JEFE_VENTAS"] },
 
-  // Marketing (Submenús desplegables en el sidebar)
-  { id: "mkt-campanas", label: "Campañas y Promociones", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
-  { id: "mkt-catalogo", label: "Fichas e Imágenes", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
-  { id: "mkt-resenas", label: "Reseñas de Clientes", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
+  // Marketing
+  { id: "mkt-hub", label: "Resumen de Marketing", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
+  { id: "mkt-nueva", label: "Nueva Campaña", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
+  { id: "mkt-campanas", label: "Registro de Campañas", group: "Marketing", roles: ["ASISTENTE_MARKETING", "JEFE_VENTAS"] },
+  { id: "mkt-catalogo", label: "Fichas e Imágenes", group: "Marketing", roles: ["ASISTENTE_MARKETING", "VENDEDOR", "JEFE_VENTAS"] },
+  { id: "mkt-resenas", label: "Reseñas de Clientes", group: "Marketing", roles: ["ASISTENTE_MARKETING", "VENDEDOR", "JEFE_VENTAS"] },
 
   // Jefatura
+  { id: "jefatura-hub", label: "Resumen de Jefatura", group: "Jefatura", roles: ["JEFE_VENTAS"] },
   { id: "jefatura-aprobaciones", label: "Aprobación de Campañas", group: "Jefatura", roles: ["JEFE_VENTAS"] },
-  { id: "jefatura-reportes", label: "Resumen Comercial", group: "Jefatura", roles: ["JEFE_VENTAS"] },
+  { id: "jefatura-reportes", label: "KPIs y Reportes", group: "Jefatura", roles: ["JEFE_VENTAS", "VENDEDOR"] },
+  { id: "jefatura-comunas", label: "Demanda por Comuna", group: "Jefatura", roles: ["JEFE_VENTAS"] },
 
   // Mi espacio
   { id: "mi-perfil", label: "Mi Cuenta y Seguridad", group: "Mi espacio", roles: ["VENDEDOR", "ASISTENTE_MARKETING", "JEFE_VENTAS"] },

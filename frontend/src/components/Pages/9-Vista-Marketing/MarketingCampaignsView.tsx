@@ -1,156 +1,105 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { useCatalog } from "@/hooks/useCatalog";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCommercial } from "@/contexts/CommercialContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatPrice } from "@/utils/currency";
-import { resolveDriveImageUrl } from "@/utils/googleDrive";
 import { OperationalCatalogEnricher } from "./OperationalCatalogEnricher";
 import { ReviewsAnalyticsView } from "../12-Reviews/ReviewsAnalyticsView";
 import { QuickAccessList, QuickAccessItem } from "@/components/ui/QuickAccessList";
+import { ExecutiveSection } from "@/components/Layout/ExecutiveShell";
+import { CampaignForm, CampaignDraft } from "./CampaignForm";
 
 export type MktSubView = "hub" | "new-campaign" | "history" | "enrichment" | "reviews";
 
 interface MarketingCampaignsViewProps {
   initialSubView?: MktSubView;
+  onNavigateSection?: (section: ExecutiveSection) => void;
 }
+
+const SUBVIEW_TO_SECTION: Record<MktSubView, ExecutiveSection> = {
+  hub: "mkt-hub",
+  "new-campaign": "mkt-nueva",
+  history: "mkt-campanas",
+  enrichment: "mkt-catalogo",
+  reviews: "mkt-resenas",
+};
 
 const STATUS_BADGE: Record<string, string> = {
   APROBADA: "bg-emerald-50 text-emerald-700 border border-emerald-200",
   RECHAZADA: "bg-red-50 text-red-700 border border-red-200",
 };
 
-const VIEW_LABELS: Record<MktSubView, string> = {
-  hub: "Accesos Rápidos",
-  "new-campaign": "Nueva Solicitud de Promoción",
-  history: "Registro de Campañas",
-  enrichment: "Catálogo e Imágenes",
-  reviews: "Reseñas y Críticas",
-};
-
 export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
   initialSubView = "hub",
+  onNavigateSection,
 }) => {
   const { user } = useAuth();
-  const { services, products } = useCatalog();
-  const { campaigns, createCampaign } = useCommercial();
+  const { campaigns, createCampaign, operationalItems } = useCommercial();
 
   const [subView, setSubView] = useState<MktSubView>(initialSubView);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setSubView(initialSubView);
   }, [initialSubView]);
 
-  const allItems = useMemo(() => [...services, ...products], [services, products]);
-
-  // Estado del Formulario de Campaña
-  const [title, setTitle] = useState(
-    "Revisión de tableros + limpieza de componentes con 30% de descuento"
-  );
-  const [description, setDescription] = useState(
-    "Mantenimiento integral termográfico y desengrase dieléctrico para prevenir recalentamientos y caídas de suministro."
-  );
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([2, 7]);
-  const [discountPercent, setDiscountPercent] = useState<number>(30);
-  const [regularPrice, setRegularPrice] = useState<number>(99990);
-  const [promoPrice, setPromoPrice] = useState<number>(69990);
-  const [validUntil, setValidUntil] = useState<string>("2026-11-28");
-  const [photoUrl, setPhotoUrl] = useState<string>(
-    "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80"
-  );
-  const [itemFilter, setItemFilter] = useState<string>("");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const directPhotoUrl = resolveDriveImageUrl(photoUrl);
-
-  const selectedItems = useMemo(
-    () => allItems.filter((i) => selectedItemIds.includes(i.id)),
-    [allItems, selectedItemIds]
-  );
-
-  const filteredCatalogItems = useMemo(() => {
-    const q = itemFilter.trim().toLowerCase();
-    if (!q) return allItems;
-    return allItems.filter(
-      (it) =>
-        it.name.toLowerCase().includes(q) ||
-        it.code.toLowerCase().includes(q)
-    );
-  }, [allItems, itemFilter]);
+  const navigate = (next: MktSubView) => {
+    setSubView(next);
+    onNavigateSection?.(SUBVIEW_TO_SECTION[next]);
+  };
 
   const stats = useMemo(() => {
     const approved = campaigns.filter((c) => c.status === "APROBADA").length;
     const pending = campaigns.filter(
       (c) => c.status !== "APROBADA" && c.status !== "RECHAZADA"
     ).length;
-
-    return {
-      total: campaigns.length,
-      pending,
-      approved,
-    };
+    return { total: campaigns.length, approved, pending };
   }, [campaigns]);
 
-  const toggleItemSelection = (id: number) => {
-    const nextIds = selectedItemIds.includes(id)
-      ? selectedItemIds.filter((i) => i !== id)
-      : [...selectedItemIds, id];
+  const handleSaveCampaign = (draft: CampaignDraft, action: "draft" | "submit") => {
+    const associated = operationalItems.filter((it) =>
+      draft.lines.some((l) => l.itemId === it.id)
+    );
+    const regularPrice = associated.reduce((acc, it) => acc + it.salePrice, 0);
 
-    setSelectedItemIds(nextIds);
-    setFormError(null);
-
-    const sumRegular = allItems
-      .filter((i) => nextIds.includes(i.id))
-      .reduce((acc, item) => acc + item.price, 0);
-
-    if (sumRegular > 0) {
-      setRegularPrice(sumRegular);
-      setPromoPrice(Math.round(sumRegular * (1 - discountPercent / 100)));
+    let promoPrice = 0;
+    for (const line of draft.lines) {
+      const item = associated.find((i) => i.id === line.itemId);
+      if (!item) continue;
+      if (draft.type === "FIXED_PRICE") {
+        promoPrice += line.value;
+      } else {
+        promoPrice += Math.round(item.salePrice * (1 - line.value / 100));
+      }
     }
-  };
 
-  const handleDiscountChange = (disc: number) => {
-    const clamped = Math.max(0, Math.min(90, disc));
-    setDiscountPercent(clamped);
-    setPromoPrice(Math.round(regularPrice * (1 - clamped / 100)));
-  };
+    const discountPercentage =
+      regularPrice > 0
+        ? Math.max(0, Math.round(((regularPrice - promoPrice) / regularPrice) * 100))
+        : 0;
 
-  const handleRegularPriceChange = (reg: number) => {
-    const safeReg = Math.max(0, reg);
-    setRegularPrice(safeReg);
-    setPromoPrice(Math.round(safeReg * (1 - discountPercent / 100)));
-  };
-
-  const handleCreateCampaign = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    if (selectedItemIds.length === 0) {
-      setFormError("Debe asociar al menos un servicio o producto del catálogo.");
-      return;
-    }
-    if (!photoUrl.trim()) {
-      setFormError("Debe ingresar una URL de imagen de respaldo para la campaña.");
-      return;
-    }
+    const firstImage =
+      associated.find((i) => i.imageUrl)?.imageUrl ||
+      "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80";
 
     createCampaign({
-      createdBy: `${user?.fullName || "Constanza Morales"} (${
-        user?.department || "Operaciones Comerciales"
-      })`,
-      title: title.trim(),
-      description: description.trim(),
-      associatedItemIds: selectedItemIds,
-      associatedItemNames: selectedItems.map((i) => i.name),
-      discountPercentage: discountPercent,
+      createdBy: `${user?.fullName || "Marketing"} (${user?.department || "Operaciones Comerciales"})`,
+      title: draft.name.trim(),
+      description: draft.description.trim() || "Campaña promocional comercial.",
+      associatedItemIds: associated.map((i) => i.id),
+      associatedItemNames: associated.map((i) => i.name),
+      discountPercentage,
       promoPrice,
       regularPrice,
-      validUntil,
-      referencePhotoUrl: photoUrl.trim(),
+      validUntil: draft.endDate,
+      referencePhotoUrl: firstImage,
     });
 
-    setToastMessage("Solicitud registrada. Enviada a Jefatura de Ventas para aprobación.");
-    setSubView("history");
+    setToastMessage(
+      action === "submit"
+        ? "Solicitud registrada y enviada a Jefatura de Ventas para aprobación."
+        : "Borrador de campaña registrado."
+    );
+    navigate("history");
     setTimeout(() => setToastMessage(null), 5000);
   };
 
@@ -159,78 +108,33 @@ export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
       id: "new-campaign",
       title: "Registro de Nueva Campaña Promocional",
       description:
-        "Formulario comercial para asociar servicios o repuestos, definir descuentos, vigencia y fotografía de respaldo.",
-      onClick: () => setSubView("new-campaign"),
+        "Formulario comercial para asociar servicios o repuestos, definir descuentos, vigencia y público.",
+      onClick: () => navigate("new-campaign"),
     },
     {
       id: "history",
       title: `Registro y Estado de Campañas (${stats.total})`,
       description: `Listado de solicitudes comerciales enviadas a Jefatura de Ventas (${stats.approved} activas · ${stats.pending} en revisión).`,
-      onClick: () => setSubView("history"),
+      onClick: () => navigate("history"),
     },
     {
       id: "enrichment",
-      title: "Catálogo & Imágenes de Productos y Servicios",
+      title: "Catálogo e Imágenes de Productos y Servicios",
       description:
         "Enriquecimiento visual con fotografías obligatorias desde Google Drive y configuración comercial.",
-      onClick: () => setSubView("enrichment"),
+      onClick: () => navigate("enrichment"),
     },
     {
       id: "reviews",
       title: "Reseñas, Críticas y Oportunidades de Mejora",
       description:
         "Monitoreo del feedback de clientes post-servicio, métricas de satisfacción y planes de acción.",
-      onClick: () => setSubView("reviews"),
+      onClick: () => navigate("reviews"),
     },
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6 animate-fadeIn">
-      {/* Barra superior de navegación tipo breadcrumb (igual que Ventas) */}
-      <div className="panel px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() => setSubView("hub")}
-            className="font-semibold text-slate-600 hover:text-brand-600 transition-colors cursor-pointer"
-          >
-            Módulo de Marketing & Catálogo
-          </button>
-          <span className="text-slate-400">/</span>
-          <span className="font-bold text-slate-900">{VIEW_LABELS[subView]}</span>
-        </div>
-
-        {/* Píldoras de cambio rápido entre sub-vistas */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { id: "hub" as const, label: "Hub" },
-            { id: "new-campaign" as const, label: "+ Nueva Campaña" },
-            { id: "history" as const, label: "Campañas" },
-            { id: "enrichment" as const, label: "Catálogo & Imágenes" },
-            { id: "reviews" as const, label: "Reseñas & Críticas" },
-          ].map((pill) => {
-            const active = subView === pill.id;
-            return (
-              <button
-                key={pill.id}
-                type="button"
-                onClick={() => setSubView(pill.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  active
-                    ? "bg-brand-600 text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/80"
-                }`}
-              >
-                {pill.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* =====================================================================
-          SUB-VISTA 1: HUB PRINCIPAL (Tarjeta módulo + Accesos Rápidos)
-         ===================================================================== */}
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 animate-fadeIn">
       {subView === "hub" && (
         <>
           <section className="panel p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -246,7 +150,7 @@ export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setSubView("new-campaign")}
+              onClick={() => navigate("new-campaign")}
               className="btn-primary h-10 px-5 shrink-0"
             >
               Nueva campaña
@@ -257,275 +161,14 @@ export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
         </>
       )}
 
-      {/* =====================================================================
-          SUB-VISTA 2: FORMULARIO NUEVA CAMPAÑA + VISTA PREVIA
-         ===================================================================== */}
       {subView === "new-campaign" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Formulario (7 cols) */}
-          <section className="lg:col-span-7 panel overflow-hidden">
-            <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-4">
-              <h2 className="text-sm font-bold text-slate-900">
-                Nueva Solicitud de Promoción
-              </h2>
-              <span className="badge bg-brand-50 text-brand-700 border border-brand-200">
-                Requiere aprobación
-              </span>
-            </div>
-
-            <form onSubmit={handleCreateCampaign} className="p-6 space-y-5">
-              {formError && (
-                <div
-                  role="alert"
-                  className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs font-medium text-red-700"
-                >
-                  {formError}
-                </div>
-              )}
-
-              <div>
-                <label className="label" htmlFor="camp-title">
-                  Título comercial de la campaña *
-                </label>
-                <input
-                  id="camp-title"
-                  type="text"
-                  placeholder="Ej: Mantenimiento preventivo de tableros con 30% de descuento"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                  className="input font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="camp-desc">
-                  Alcance y condiciones *
-                </label>
-                <textarea
-                  id="camp-desc"
-                  rows={2}
-                  placeholder="Especifique alcance técnico, exclusiones y condiciones comerciales..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  required
-                  className="w-full p-3 rounded-lg border border-slate-300 bg-white text-[13px] text-slate-900 outline-none transition-all hover:border-slate-400 focus:border-brand-600 focus:ring-3 focus:ring-brand-200/70"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="label !mb-0">Ítems incluidos del catálogo *</label>
-                  <span className="text-[11px] font-semibold text-brand-600 tabular-nums">
-                    {selectedItemIds.length} seleccionados
-                  </span>
-                </div>
-
-                <div className="border border-slate-300 rounded-lg overflow-hidden bg-white">
-                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
-                    <input
-                      type="text"
-                      placeholder="Filtrar por código o nombre de servicio/repuesto..."
-                      value={itemFilter}
-                      onChange={(e) => setItemFilter(e.target.value)}
-                      className="w-full text-xs bg-transparent text-slate-800 placeholder:text-slate-400 outline-none"
-                    />
-                  </div>
-
-                  <div className="max-h-44 overflow-y-auto divide-y divide-slate-100">
-                    {filteredCatalogItems.map((it) => {
-                      const isChecked = selectedItemIds.includes(it.id);
-                      return (
-                        <label
-                          key={it.id}
-                          className={`flex items-center justify-between px-3 py-2 text-xs cursor-pointer transition-colors ${
-                            isChecked
-                              ? "bg-brand-50/70 text-slate-900"
-                              : "hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0 pr-3">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => toggleItemSelection(it.id)}
-                              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                            />
-                            <span className="font-mono text-[11px] text-slate-500 shrink-0">
-                              {it.code}
-                            </span>
-                            <span className="font-medium truncate">{it.name}</span>
-                          </div>
-                          <span className="font-mono text-xs text-slate-700 font-semibold tabular-nums shrink-0">
-                            {formatPrice(it.price)}
-                          </span>
-                        </label>
-                      );
-                    })}
-                    {filteredCatalogItems.length === 0 && (
-                      <div className="p-4 text-center text-xs text-slate-500">
-                        Sin coincidencias en el catálogo.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-                <div>
-                  <label className="label" htmlFor="camp-reg">
-                    Precio lista (CLP)
-                  </label>
-                  <input
-                    id="camp-reg"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={regularPrice}
-                    onChange={(e) => handleRegularPriceChange(Number(e.target.value))}
-                    className="input tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="camp-disc">
-                    Descuento (%) *
-                  </label>
-                  <input
-                    id="camp-disc"
-                    type="number"
-                    min="0"
-                    max="90"
-                    value={discountPercent}
-                    onChange={(e) => handleDiscountChange(Number(e.target.value))}
-                    required
-                    className="input font-semibold tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="camp-promo">
-                    Precio oferta (CLP) *
-                  </label>
-                  <input
-                    id="camp-promo"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={promoPrice}
-                    onChange={(e) => setPromoPrice(Number(e.target.value))}
-                    required
-                    className="input font-bold text-brand-700 tabular-nums"
-                  />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="camp-date">
-                    Vigencia hasta *
-                  </label>
-                  <input
-                    id="camp-date"
-                    type="date"
-                    value={validUntil}
-                    onChange={(e) => setValidUntil(e.target.value)}
-                    required
-                    className="input tabular-nums"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="camp-photo">
-                  Recurso gráfico (URL directa o enlace de Google Drive) *
-                </label>
-                <input
-                  id="camp-photo"
-                  type="url"
-                  placeholder="https://drive.google.com/file/d/... o https://..."
-                  value={photoUrl}
-                  onChange={(e) => setPhotoUrl(e.target.value)}
-                  required
-                  className="input font-mono text-xs"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSubView("hub")}
-                  className="btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="btn-primary px-6">
-                  Enviar a aprobación de Jefatura
-                </button>
-              </div>
-            </form>
-          </section>
-
-          {/* Vista Previa (5 cols) */}
-          <section className="lg:col-span-5 panel overflow-hidden">
-            <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800">
-                Vista previa en Portal Cliente
-              </span>
-              <span className="text-[11px] text-slate-500">Render en vivo</span>
-            </div>
-
-            <div className="relative aspect-[16/9] bg-slate-100 overflow-hidden border-b border-slate-200">
-              <img
-                src={directPhotoUrl}
-                alt={title}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
-              />
-              <span className="absolute top-3 left-3 badge bg-brand-600 text-white shadow-xs">
-                -{discountPercent}% OFF
-              </span>
-              <span className="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-slate-900/85 text-white text-[11px] font-medium tabular-nums">
-                Válido hasta{" "}
-                {validUntil
-                  ? new Date(validUntil + "T00:00:00").toLocaleDateString("es-CL")
-                  : "—"}
-              </span>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-slate-900 leading-snug">
-                  {title || "Sin título definido"}
-                </h3>
-                <p className="text-xs text-slate-600 line-clamp-2">
-                  {description || "Sin descripción comercial."}
-                </p>
-              </div>
-
-              <div className="flex items-baseline gap-2.5 pt-1">
-                <span className="text-xl font-bold text-brand-700 tabular-nums">
-                  {formatPrice(promoPrice)}
-                </span>
-                <span className="text-xs text-slate-400 line-through tabular-nums">
-                  {formatPrice(regularPrice)}
-                </span>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-600">
-                <span className="font-semibold text-slate-800">Ítems asociados: </span>
-                {selectedItems.length > 0
-                  ? selectedItems.map((i) => `${i.code} (${i.name})`).join(" · ")
-                  : "Ninguno"}
-              </div>
-            </div>
-          </section>
-        </div>
+        <CampaignForm
+          embedded
+          onSave={handleSaveCampaign}
+          onCancel={() => navigate("hub")}
+        />
       )}
 
-      {/* =====================================================================
-          SUB-VISTA 3: BITÁCORA TABULAR DE CAMPAÑAS
-         ===================================================================== */}
       {subView === "history" && (
         <section className="panel overflow-hidden">
           <div className="px-6 py-4 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
@@ -539,7 +182,7 @@ export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setSubView("new-campaign")}
+              onClick={() => navigate("new-campaign")}
               className="btn-primary !min-h-[34px] !px-3.5 !text-xs"
             >
               Nueva campaña
@@ -601,14 +244,10 @@ export const MarketingCampaignsView: React.FC<MarketingCampaignsViewProps> = ({
         </section>
       )}
 
-      {/* =====================================================================
-          SUB-VISTA 4 Y 5: CATÁLOGO E IMÁGENES / RESEÑAS
-         ===================================================================== */}
       {subView === "enrichment" && <OperationalCatalogEnricher embedded />}
 
       {subView === "reviews" && <ReviewsAnalyticsView embedded />}
 
-      {/* Notificación operativa discreta */}
       {toastMessage && (
         <div
           role="status"
