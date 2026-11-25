@@ -92,9 +92,15 @@ export const msRepuestos = {
 };
 
 export const msServicios = {
-  /** GET /api/catalog/services — servicios activos. */
-  listar(signal?: AbortSignal): Promise<ServicioCatalogo[]> {
-    return fetchMs<ServicioCatalogo[]>(`${MS_CATALOG_BASE}/api/catalog/services`, signal);
+  /** GET /api/catalog/services — servicios activos (soporta respuesta paginada Page<T> o array). */
+  async listar(signal?: AbortSignal): Promise<ServicioCatalogo[]> {
+    const data = await fetchMs<any>(
+      `${MS_CATALOG_BASE}/api/catalog/services?size=100&soloActivos=true`,
+      signal
+    );
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.content)) return data.content;
+    return [];
   },
 };
 
